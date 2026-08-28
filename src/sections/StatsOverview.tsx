@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { MovieRecord } from '@/types/movie'
 import { brandColor, formatPrice } from '@/types/movie'
-import { overallStats, spendByCurrency, byYear, byFormat, topCinemas, byMonth, topRewatched } from '@/lib/stats'
+import { overallStats, spendByCurrency, byYear, byFormat, topCinemas, byMonth, topRewatched, dayCounts } from '@/lib/stats'
 import { chartPalette, useTheme } from '@/hooks/useTheme'
 
 export default function StatsOverview({ records }: { records: MovieRecord[] }) {
@@ -42,6 +42,7 @@ export default function StatsOverview({ records }: { records: MovieRecord[] }) {
   const formats = useMemo(() => byFormat(filtered), [filtered])
   const cinemas = useMemo(() => topCinemas(filtered), [filtered])
   const rewatched = useMemo(() => topRewatched(filtered), [filtered])
+  const heat = useMemo(() => (isAll ? null : dayCounts(records, Number(year))), [records, year, isAll])
   const hasForeign = spending.some(c => c.currency !== 'CNY')
 
   const trendData = isAll ? yearly : monthly
@@ -224,6 +225,47 @@ export default function StatsOverview({ records }: { records: MovieRecord[] }) {
           </Card>
         )}
       </div>
+
+      {heat && (
+        <Card className="border-border bg-card">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-foreground">{year} 年观影日历</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-1 overflow-x-auto pb-1">
+              {Array.from({ length: 12 }, (_, mi) => {
+                const month = mi + 1
+                const dim = new Date(Number(year), month, 0).getDate()
+                return (
+                  <div key={month} className="flex items-center gap-1">
+                    <span className="w-8 shrink-0 text-right text-[10px] text-muted-foreground">{month}月</span>
+                    {Array.from({ length: 31 }, (_, di) => {
+                      const day = di + 1
+                      if (day > dim) return <span key={day} className="h-3 w-3 shrink-0" />
+                      const c = heat.get(`${month}-${day}`) ?? 0
+                      return (
+                        <span
+                          key={day}
+                          title={`${month}月${day}日${c ? ` · ${c} 场` : ''}`}
+                          className={`h-3 w-3 shrink-0 rounded-[2px] ${c ? '' : 'bg-muted/60'}`}
+                          style={c ? { backgroundColor: `rgba(245,158,11,${c >= 3 ? 1 : c === 2 ? 0.7 : 0.4})` } : undefined}
+                        />
+                      )
+                    })}
+                  </div>
+                )
+              })}
+            </div>
+            <div className="mt-3 flex items-center justify-end gap-1.5 text-[10px] text-muted-foreground">
+              少
+              {[0.15, 0.4, 0.7, 1].map(a => (
+                <span key={a} className="h-3 w-3 rounded-[2px]" style={{ backgroundColor: `rgba(245,158,11,${a})` }} />
+              ))}
+              多
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

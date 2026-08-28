@@ -17,12 +17,13 @@ import type { MovieRecord, MovieDraft } from '@/types/movie'
 import { listRegions } from '@/types/movie'
 
 export default function Home() {
-  const { records, addRecord, updateRecord, deleteRecord, restoreRecords, importRecords, resetToBase, isCustomized, suggestRegion, baseCount } = useMovies()
+  const { records, addRecord, updateRecord, deleteRecord, restoreRecords, deleteMany, setRegionFor, importRecords, resetToBase, isCustomized, suggestRegion, baseCount } = useMovies()
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<MovieRecord | null>(null)
   const [deleting, setDeleting] = useState<MovieRecord | null>(null)
   const [resetOpen, setResetOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [pendingDup, setPendingDup] = useState<{ draft: MovieDraft; existing: MovieRecord } | null>(null)
   const { theme, toggle } = useTheme()
   const [bannerDismissed, setBannerDismissed] = useState(false)
   const [lastExport, setLastExport] = useState<number>(() => Number(localStorage.getItem(LAST_EXPORT_KEY)) || 0)
@@ -45,10 +46,28 @@ export default function Home() {
       updateRecord(editing.id, draft)
       toast.success(`已更新《${draft.title}》`)
     } else {
+      // 重复检测：同片名 + 同日期，可能是误录（也可能是同场二刷，由用户确认）
+      const dup = records.find(r => r.title.trim() === draft.title.trim() && r.date === draft.date)
+      if (dup) {
+        setPendingDup({ draft, existing: dup })
+        return
+      }
       addRecord(draft)
       toast.success(`已添加《${draft.title}》`)
     }
     setEditing(null)
+  }
+
+  const handleDeleteMany = (list: MovieRecord[]) => {
+    deleteMany(list.map(r => r.id))
+    toast.success(`已删除 ${list.length} 条记录`, {
+      action: { label: '撤销', onClick: () => restoreRecords(list) },
+    })
+  }
+
+  const handleSetRegion = (ids: number[], region: string) => {
+    setRegionFor(ids, region)
+    toast.success(`已将 ${ids.length} 条记录的地区改为「${region}」`)
   }
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -142,6 +161,8 @@ export default function Home() {
               records={records}
               onEdit={r => { setEditing(r); setFormOpen(true) }}
               onDelete={setDeleting}
+              onDeleteMany={handleDeleteMany}
+              onSetRegion={handleSetRegion}
             />
           </TabsContent>
         </Tabs>
@@ -203,6 +224,32 @@ export default function Home() {
             <AlertDialogAction className="bg-rose-600 text-white hover:bg-rose-500"
               onClick={() => { resetToBase(); toast.success('已重置为初始数据') }}>
               重置
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!pendingDup} onOpenChange={v => !v && setPendingDup(null)}>
+        <AlertDialogContent className="border-border bg-background text-foreground">
+          <AlertDialogHeader>
+            <AlertDialogTitle>疑似重复记录</AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground">
+              已有《{pendingDup?.existing.title}》在 {pendingDup?.existing.date}（{pendingDup?.existing.cinema || '未知影院'}）的观影记录。
+              如果是同一天又看了一场可以继续添加，否则建议编辑原记录。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className={btnCls}>取消</AlertDialogCancel>
+            <AlertDialogAction className="bg-amber-500 text-stone-950 hover:bg-amber-400"
+              onClick={() => {
+                if (pendingDup) {
+                  addRecord(pendingDup.draft)
+                  toast.success(`已添加《${pendingDup.draft.title}》`)
+                  setPendingDup(null)
+                  setEditing(null)
+                }
+              }}>
+              仍要添加
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

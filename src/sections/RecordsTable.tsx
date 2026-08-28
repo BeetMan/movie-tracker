@@ -3,6 +3,11 @@ import { ArrowUpDown, Pencil, Search, Trash2, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { MovieRecord } from '@/types/movie'
 import { formatCategory, brandColor, formatPrice } from '@/types/movie'
@@ -15,9 +20,11 @@ interface Props {
   records: MovieRecord[]
   onEdit: (r: MovieRecord) => void
   onDelete: (r: MovieRecord) => void
+  onDeleteMany: (list: MovieRecord[]) => void
+  onSetRegion: (ids: number[], region: string) => void
 }
 
-export default function RecordsTable({ records, onEdit, onDelete }: Props) {
+export default function RecordsTable({ records, onEdit, onDelete, onDeleteMany, onSetRegion }: Props) {
   const [q, setQ] = useState('')
   const [year, setYear] = useState('all')
   const [region, setRegion] = useState('all')
@@ -26,6 +33,9 @@ export default function RecordsTable({ records, onEdit, onDelete }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('date')
   const [sortDesc, setSortDesc] = useState(true)
   const [page, setPage] = useState(1)
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [regionInput, setRegionInput] = useState('')
+  const [confirmDel, setConfirmDel] = useState(false)
 
   const years = useMemo(() => [...new Set(records.map(r => r.year))].sort((a, b) => b - a), [records])
   const regions = useMemo(() => {
@@ -69,6 +79,44 @@ export default function RecordsTable({ records, onEdit, onDelete }: Props) {
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const cur = Math.min(page, pages)
   const slice = filtered.slice((cur - 1) * PAGE_SIZE, cur * PAGE_SIZE)
+
+  // 剔除已不存在的 id（例如撤销恢复、外部导入后选择集过期）
+  const validSelected = useMemo(() => {
+    const ids = new Set(records.map(r => r.id))
+    return new Set([...selected].filter(id => ids.has(id)))
+  }, [selected, records])
+  const selectedRecords = useMemo(() => records.filter(r => validSelected.has(r.id)), [records, validSelected])
+  const pageAllChecked = slice.length > 0 && slice.every(r => validSelected.has(r.id))
+
+  const toggleOne = (id: number, on: boolean) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (on) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  }
+  const togglePage = (on: boolean) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      for (const r of slice) {
+        if (on) next.add(r.id)
+        else next.delete(r.id)
+      }
+      return next
+    })
+  }
+  const applyRegion = () => {
+    const region = regionInput.trim()
+    if (!region) return
+    onSetRegion([...validSelected], region)
+    setRegionInput('')
+  }
+  const confirmBatchDelete = () => {
+    onDeleteMany(selectedRecords)
+    setSelected(new Set())
+    setConfirmDel(false)
+  }
 
   const hasFilter = q || year !== 'all' || region !== 'all' || cat !== 'all' || cinema !== 'all'
   const clearFilters = () => { setQ(''); setYear('all'); setRegion('all'); setCat('all'); setCinema('all'); setPage(1) }
@@ -127,10 +175,48 @@ export default function RecordsTable({ records, onEdit, onDelete }: Props) {
         )}
       </div>
 
+      {validSelected.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-400/10 px-3 py-2 text-sm">
+          <span className="font-medium text-foreground">已选 {validSelected.size} 场</span>
+          <div className="flex items-center gap-1.5">
+            <Input
+              list="batch-region-options"
+              value={regionInput}
+              onChange={e => setRegionInput(e.target.value)}
+              placeholder="改为地区…"
+              className="h-8 w-36 border-input bg-card text-foreground placeholder:text-muted-foreground/60"
+              onKeyDown={e => e.key === 'Enter' && applyRegion()}
+            />
+            <datalist id="batch-region-options">
+              {regions.map(r => <option key={r} value={r} />)}
+            </datalist>
+            <Button size="sm" variant="outline" disabled={!regionInput.trim()} onClick={applyRegion}
+              className="border-input bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40">
+              应用
+            </Button>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => setConfirmDel(true)}
+            className="border-rose-500/40 bg-transparent text-rose-500 hover:bg-rose-500/10 hover:text-rose-500 dark:text-rose-400 dark:hover:text-rose-400">
+            <Trash2 className="mr-1 h-3.5 w-3.5" />批量删除
+          </Button>
+          <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-foreground" onClick={() => setSelected(new Set())}>
+            <X className="mr-1 h-3.5 w-3.5" />取消选择
+          </Button>
+        </div>
+      )}
+
       <div className="overflow-x-auto rounded-lg border border-border">
         <table className="w-full min-w-[900px] text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/60 text-left text-xs text-muted-foreground">
+              <th className="w-10 px-3 py-2.5">
+                <Checkbox
+                  checked={pageAllChecked}
+                  onCheckedChange={v => togglePage(!!v)}
+                  aria-label="选择本页"
+                  className="border-input data-[state=checked]:border-amber-500 data-[state=checked]:bg-amber-500 data-[state=checked]:text-stone-950"
+                />
+              </th>
               <Th label="影片" k="title" sortKey={sortKey} desc={sortDesc} onSort={toggleSort} className="px-3 py-2.5" />
               <Th label="日期" k="date" sortKey={sortKey} desc={sortDesc} onSort={toggleSort} className="px-3 py-2.5" />
               <th className="px-3 py-2.5 font-medium">制式</th>
@@ -143,7 +229,15 @@ export default function RecordsTable({ records, onEdit, onDelete }: Props) {
           </thead>
           <tbody>
             {slice.map(r => (
-              <tr key={r.id} className="border-b border-border/60 text-muted-foreground transition-colors hover:bg-muted/40">
+              <tr key={r.id} className={`border-b border-border/60 text-muted-foreground transition-colors hover:bg-muted/40 ${validSelected.has(r.id) ? 'bg-amber-400/5' : ''}`}>
+                <td className="px-3 py-2.5">
+                  <Checkbox
+                    checked={validSelected.has(r.id)}
+                    onCheckedChange={v => toggleOne(r.id, !!v)}
+                    aria-label={`选择《${r.title}》`}
+                    className="border-input data-[state=checked]:border-amber-500 data-[state=checked]:bg-amber-500 data-[state=checked]:text-stone-950"
+                  />
+                </td>
                 <td className="max-w-56 px-3 py-2.5">
                   <div className="truncate font-medium text-foreground" title={r.title}>{r.title}</div>
                   {r.special && <Badge variant="outline" className="mt-0.5 border-amber-500/40 text-[10px] text-amber-600 dark:text-amber-400">{r.special}</Badge>}
@@ -186,7 +280,7 @@ export default function RecordsTable({ records, onEdit, onDelete }: Props) {
               </tr>
             ))}
             {slice.length === 0 && (
-              <tr><td colSpan={8} className="px-3 py-10 text-center text-muted-foreground">没有匹配的记录</td></tr>
+              <tr><td colSpan={9} className="px-3 py-10 text-center text-muted-foreground">没有匹配的记录</td></tr>
             )}
           </tbody>
         </table>
@@ -215,6 +309,23 @@ export default function RecordsTable({ records, onEdit, onDelete }: Props) {
             className="border-input bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40">下一页</Button>
         </div>
       </div>
+
+      <AlertDialog open={confirmDel} onOpenChange={setConfirmDel}>
+        <AlertDialogContent className="border-border bg-background text-foreground">
+          <AlertDialogHeader>
+            <AlertDialogTitle>批量删除 {validSelected.size} 条记录？</AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground">
+              将删除选中的 {validSelected.size} 场观影记录。删除后可在提示中点击「撤销」恢复。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-input bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground">取消</AlertDialogCancel>
+            <AlertDialogAction className="bg-rose-600 text-white hover:bg-rose-500" onClick={confirmBatchDelete}>
+              删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

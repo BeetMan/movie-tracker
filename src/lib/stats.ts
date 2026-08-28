@@ -84,6 +84,18 @@ export function byMonth(records: MovieRecord[]) {
   return counts.map((v, i) => ({ month: `${i + 1}月`, 场次: v, 花费: Math.round(spends[i]) }))
 }
 
+/** 某一年每天（月-日）的观影场次，用于日历热力图；日期不完整的记录（如 2024.05.?）跳过 */
+export function dayCounts(records: MovieRecord[], year: number): Map<string, number> {
+  const map = new Map<string, number>()
+  for (const r of records) {
+    const m = /^(\d{4})\.(\d{2})\.(\d{2})/.exec(r.date)
+    if (!m || Number(m[1]) !== year) continue
+    const key = `${Number(m[2])}-${Number(m[3])}`
+    map.set(key, (map.get(key) ?? 0) + 1)
+  }
+  return map
+}
+
 export function topRewatched(records: MovieRecord[], n = 8) {
   const map = new Map<string, number>()
   for (const r of records) map.set(r.title, (map.get(r.title) ?? 0) + 1)

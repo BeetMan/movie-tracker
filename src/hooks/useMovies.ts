@@ -73,6 +73,17 @@ export function useMovies() {
     })
   }, [])
 
+  const deleteMany = useCallback((ids: number[]) => {
+    const set = new Set(ids)
+    setRecords(prev => prev.filter(r => !set.has(r.id)))
+  }, [])
+
+  /** 批量修改地区 */
+  const setRegionFor = useCallback((ids: number[], region: string) => {
+    const set = new Set(ids)
+    setRecords(prev => prev.map(r => (set.has(r.id) ? { ...r, region } : r)))
+  }, [])
+
   const importRecords = useCallback((list: MovieRecord[]) => {
     const map = learnRegionMap(list)
     const cleaned = list.map((r, i) => ({
@@ -91,7 +102,7 @@ export function useMovies() {
 
   const isCustomized = useMemo(() => localStorage.getItem(STORAGE_KEY) !== null, [records])
 
-  return { records, addRecord, updateRecord, deleteRecord, restoreRecords, importRecords, resetToBase, isCustomized, suggestRegion, baseCount: base.length }
+  return { records, addRecord, updateRecord, deleteRecord, restoreRecords, deleteMany, setRegionFor, importRecords, resetToBase, isCustomized, suggestRegion, baseCount: base.length }
 }
 
 export function exportJson(records: MovieRecord[]) {
