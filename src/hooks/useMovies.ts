@@ -4,6 +4,8 @@ import type { MovieRecord, MovieDraft } from '@/types/movie'
 import { learnRegionMap } from '@/types/movie'
 
 const STORAGE_KEY = 'movie-db-v1'
+/** 最后一次导出备份的时间戳（毫秒），用于备份提醒 */
+export const LAST_EXPORT_KEY = 'movie-db-last-export'
 
 const base = baseData as MovieRecord[]
 
@@ -62,6 +64,15 @@ export function useMovies() {
     setRecords(prev => prev.filter(r => r.id !== id))
   }, [])
 
+  /** 把误删的记录按原 id 放回去（配合删除后的「撤销」） */
+  const restoreRecords = useCallback((list: MovieRecord[]) => {
+    setRecords(prev => {
+      const existing = new Set(prev.map(r => r.id))
+      const back = list.filter(r => !existing.has(r.id))
+      return back.length ? [...prev, ...back] : prev
+    })
+  }, [])
+
   const importRecords = useCallback((list: MovieRecord[]) => {
     const map = learnRegionMap(list)
     const cleaned = list.map((r, i) => ({
@@ -80,15 +91,17 @@ export function useMovies() {
 
   const isCustomized = useMemo(() => localStorage.getItem(STORAGE_KEY) !== null, [records])
 
-  return { records, addRecord, updateRecord, deleteRecord, importRecords, resetToBase, isCustomized, suggestRegion, baseCount: base.length }
+  return { records, addRecord, updateRecord, deleteRecord, restoreRecords, importRecords, resetToBase, isCustomized, suggestRegion, baseCount: base.length }
 }
 
 export function exportJson(records: MovieRecord[]) {
+  markExported()
   const blob = new Blob([JSON.stringify(records, null, 1)], { type: 'application/json' })
   download(blob, `观影数据库_${today()}.json`)
 }
 
 export function exportCsv(records: MovieRecord[]) {
+  markExported()
   const header = '影片,日期,地区,格式,影院,影厅,座位,票价,币种,备注,特效厅标注'
   const esc = (v: string | number | null | undefined) => {
     const s = v === null || v === undefined ? '' : String(v)
@@ -99,6 +112,10 @@ export function exportCsv(records: MovieRecord[]) {
   )
   const blob = new Blob(['﻿' + header + '\n' + lines.join('\n')], { type: 'text/csv' })
   download(blob, `观影数据库_${today()}.csv`)
+}
+
+function markExported() {
+  try { localStorage.setItem(LAST_EXPORT_KEY, String(Date.now())) } catch { /* ignore */ }
 }
 
 function download(blob: Blob, name: string) {

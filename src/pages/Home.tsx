@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Clapperboard, Download, FileSpreadsheet, Moon, Plus, RotateCcw, Settings, Sun, Upload } from 'lucide-react'
+import { Clapperboard, Download, FileSpreadsheet, Info, Moon, Plus, RotateCcw, Settings, Sun, Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -7,7 +7,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Toaster, toast } from 'sonner'
-import { useMovies, exportJson, exportCsv } from '@/hooks/useMovies'
+import { useMovies, exportJson, exportCsv, LAST_EXPORT_KEY } from '@/hooks/useMovies'
 import { useTheme } from '@/hooks/useTheme'
 import StatsOverview from '@/sections/StatsOverview'
 import RecordsTable from '@/sections/RecordsTable'
@@ -17,13 +17,19 @@ import type { MovieRecord, MovieDraft } from '@/types/movie'
 import { listRegions } from '@/types/movie'
 
 export default function Home() {
-  const { records, addRecord, updateRecord, deleteRecord, importRecords, resetToBase, suggestRegion, baseCount } = useMovies()
+  const { records, addRecord, updateRecord, deleteRecord, restoreRecords, importRecords, resetToBase, isCustomized, suggestRegion, baseCount } = useMovies()
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<MovieRecord | null>(null)
   const [deleting, setDeleting] = useState<MovieRecord | null>(null)
   const [resetOpen, setResetOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const { theme, toggle } = useTheme()
+  const [bannerDismissed, setBannerDismissed] = useState(false)
+  const [lastExport, setLastExport] = useState<number>(() => Number(localStorage.getItem(LAST_EXPORT_KEY)) || 0)
+  const backupOverdue = isCustomized && (lastExport === 0 || Date.now() - lastExport > 30 * 24 * 3600 * 1000)
+
+  const handleExportJson = () => { exportJson(records); setLastExport(Date.now()) }
+  const handleExportCsv = () => { exportCsv(records); setLastExport(Date.now()) }
   const fileRef = useRef<HTMLInputElement>(null)
   const regionOptions = listRegions(records)
   const cinemaOptions = (() => {
@@ -84,10 +90,10 @@ export default function Home() {
             <Button className="bg-amber-500 text-stone-950 hover:bg-amber-400" onClick={() => { setEditing(null); setFormOpen(true) }}>
               <Plus className="mr-1.5 h-4 w-4" />记一笔
             </Button>
-            <Button variant="outline" className={btnCls} onClick={() => exportJson(records)}>
+            <Button variant="outline" className={btnCls} onClick={handleExportJson}>
               <Download className="mr-1.5 h-4 w-4" />导出 JSON
             </Button>
-            <Button variant="outline" className={btnCls} onClick={() => exportCsv(records)}>
+            <Button variant="outline" className={btnCls} onClick={handleExportCsv}>
               <FileSpreadsheet className="mr-1.5 h-4 w-4" />导出 CSV
             </Button>
             <Button variant="outline" className={btnCls} onClick={() => fileRef.current?.click()}>
@@ -105,6 +111,23 @@ export default function Home() {
             <input ref={fileRef} type="file" accept="application/json" className="hidden" onChange={handleImport} />
           </div>
         </header>
+
+        {backupOverdue && !bannerDismissed && (
+          <div className="mb-6 flex items-center gap-3 rounded-lg border border-amber-500/40 bg-amber-400/10 px-4 py-3 text-sm">
+            <Info className="h-4 w-4 shrink-0 text-amber-500 dark:text-amber-400" />
+            <span className="flex-1 text-foreground">
+              {lastExport === 0
+                ? '你的观影数据只保存在这个浏览器里，还没有导出过备份。清除浏览器数据会导致记录丢失。'
+                : `距上次导出备份已超过 30 天，建议导出一份最新备份。`}
+            </span>
+            <Button size="sm" className="bg-amber-500 text-stone-950 hover:bg-amber-400" onClick={handleExportJson}>
+              立即导出
+            </Button>
+            <button className="text-muted-foreground hover:text-foreground" title="知道了" onClick={() => setBannerDismissed(true)}>
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
 
         <Tabs defaultValue="overview">
           <TabsList className="mb-4 border border-border bg-card">
@@ -151,7 +174,16 @@ export default function Home() {
           <AlertDialogFooter>
             <AlertDialogCancel className={btnCls}>取消</AlertDialogCancel>
             <AlertDialogAction className="bg-rose-600 text-white hover:bg-rose-500"
-              onClick={() => { if (deleting) { deleteRecord(deleting.id); toast.success('已删除'); setDeleting(null) } }}>
+              onClick={() => {
+                if (deleting) {
+                  const snapshot = deleting
+                  deleteRecord(snapshot.id)
+                  toast.success(`已删除《${snapshot.title}》`, {
+                    action: { label: '撤销', onClick: () => restoreRecords([snapshot]) },
+                  })
+                  setDeleting(null)
+                }
+              }}>
               删除
             </AlertDialogAction>
           </AlertDialogFooter>

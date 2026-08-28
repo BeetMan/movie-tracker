@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,13 +18,16 @@ export default function SettingsDialog({ open, onOpenChange }: Props) {
   const [key, setKey] = useState('')
   const [model, setModel] = useState(DEFAULT_MODEL)
 
-  useEffect(() => {
+  // 对话框每次打开时在渲染期间重新加载设置（React 推荐的 adjust-state-during-render 模式，避免在 effect 中同步 setState）
+  const [prevOpen, setPrevOpen] = useState(false)
+  if (open !== prevOpen) {
+    setPrevOpen(open)
     if (open) {
       setMode((localStorage.getItem(OCR_MODE_STORAGE) as OcrMode) || 'ai')
       setKey(localStorage.getItem(API_KEY_STORAGE) ?? '')
       setModel(localStorage.getItem(MODEL_STORAGE) || DEFAULT_MODEL)
     }
-  }, [open])
+  }
 
   const save = () => {
     localStorage.setItem(OCR_MODE_STORAGE, mode)
