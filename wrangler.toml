@@ -1,0 +1,19 @@
+# Cloudflare Workers 部署配置（静态资产-only Worker，无服务端代码）
+# 部署到 https://beetya.ng/movie/
+# 用法：npm run build:cf && npx wrangler deploy
+name = "movie-tracker"
+compatibility_date = "2026-08-28"
+main = "worker.js"
+
+# 只接管 /movie 子路径，beetya.ng 其余路径仍由 Pages 项目 beetya-ng 处理
+# 注意：routes 是顶层字段，必须写在 [assets] 表之前
+routes = [
+  { pattern = "beetya.ng/movie", zone_name = "beetya.ng" },
+  { pattern = "beetya.ng/movie/*", zone_name = "beetya.ng" },
+]
+
+[assets]
+directory = "./dist-cf"
+binding = "ASSETS"
+# SPA 回退：未知路径返回 index.html
+not_found_handling = "single-page-application"

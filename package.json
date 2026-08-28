@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:cf": "tsc -b && vite build --base=/movie/ --outDir dist-cf",
     "lint": "eslint .",
     "preview": "vite preview"
   },

@@ -8,10 +8,13 @@ import { applyInitialTheme } from '@/hooks/useTheme'
 
 applyInitialTheme()
 
+// 子路径部署（如 Cloudflare 上的 /movie/）时给路由加 basename；base 为相对路径 './' 时不设
+const basename = import.meta.env.BASE_URL.startsWith('/') ? import.meta.env.BASE_URL : undefined
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
-      <BrowserRouter>
+      <BrowserRouter basename={basename}>
         <App />
       </BrowserRouter>
     </ErrorBoundary>

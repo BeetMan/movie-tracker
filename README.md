@@ -28,6 +28,17 @@ npm run build    # 构建（产物在 dist/）
 npm run lint     # ESLint
 ```
 
+## 部署到 Cloudflare（子路径 /movie/）
+
+本项目通过静态资产 Worker 部署在 `beetya.ng/movie/` 子路径下（`wrangler.toml` + `worker.js` 负责剥掉路径前缀）：
+
+```bash
+npm run build:cf        # 以 --base=/movie/ 构建到 dist-cf/
+npx wrangler deploy     # 部署并绑定 beetya.ng/movie 路由
+```
+
+根目录的 `npm run build`（base 为 `./`）不受影响，可用于其他平台部署。
+
 ## 数据说明
 
 - 内置 `src/data/movies.json` 为演示数据；运行时的增删改全部写入 localStorage（key：`movie-db-v1`），读取优先级：localStorage > 内置 JSON
