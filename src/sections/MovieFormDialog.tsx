@@ -34,9 +34,10 @@ const empty: MovieDraft = {
   price: null, currency: 'CNY', note: null, special: null, region: '',
 }
 
-/** YYYY.M.D（不补零，与现有数据一致） */
+/** YYYY.MM.DD（补零，与现有数据一致；byMonth / dayCounts 等统计按两位解析） */
 function fmtDate(d: Date): string {
-  return `${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()}`
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())}`
 }
 
 /** 把 YYYY.M.D 解析成 Date；含 ? 或不合法返回 undefined */
@@ -199,9 +200,9 @@ export default function MovieFormDialog({ open, onOpenChange, initial, onSubmit,
 
         <div className="grid gap-4 py-2 sm:grid-cols-2">
           {field('影片 *', <Input className={inputCls} value={form.title} onChange={e => set('title', e.target.value)} placeholder="片名" />, true)}
-          {field('日期 *（YYYY.M.D）', (
+          {field('日期 *（YYYY.MM.DD）', (
             <div className="flex gap-2">
-              <Input className={`${inputCls} flex-1`} value={form.date} onChange={e => set('date', e.target.value)} placeholder="2026.7.24" />
+              <Input className={`${inputCls} flex-1`} value={form.date} onChange={e => set('date', e.target.value)} placeholder="2026.07.24" />
               <Popover open={calOpen} onOpenChange={setCalOpen}>
                 <PopoverTrigger asChild>
                   <Button variant="outline" size="icon" className={`${inputCls} shrink-0`} title="从日历选择">

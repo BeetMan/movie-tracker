@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { Film, ImageOff, Loader2, RefreshCw, Search, Settings } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -8,9 +8,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { MovieRecord } from '@/types/movie'
 import {
-  cacheKey, getTmdbKey, loadPosterCache, savePosterCache,
+  cacheKey, getPosterCache, getTmdbKey, savePosterCache, subscribePosters,
   pickBest, posterUrl, searchMovie,
-  type PosterCache, type PosterMatch,
+  type PosterMatch,
 } from '@/lib/tmdb'
 
 interface FilmEntry {
@@ -30,20 +30,10 @@ const CONCURRENCY = 3
 
 export default function PosterWall({ records, onNeedSettings }: Props) {
   const [year, setYear] = useState('all')
-  const [cache, setCache] = useState<PosterCache>(loadPosterCache)
+  const cache = useSyncExternalStore(subscribePosters, getPosterCache)
   const [fetching, setFetching] = useState(false)
   const [rematch, setRematch] = useState<FilmEntry | null>(null)
-  const cacheRef = useRef(cache)
   const key = getTmdbKey()
-
-  const updateCache = (keyStr: string, match: PosterMatch | null) => {
-    setCache(prev => {
-      const next = { ...prev, [keyStr]: match }
-      cacheRef.current = next
-      savePosterCache(next)
-      return next
-    })
-  }
 
   // 按片名去重：一部影片一张海报
   const films = useMemo(() => {
@@ -70,7 +60,7 @@ export default function PosterWall({ records, onNeedSettings }: Props) {
   // 自动匹配缺失的海报（并发 3，失败不写缓存以便下次重试）
   useEffect(() => {
     if (!key) return
-    const missing = shown.filter(f => !(cacheKey(f.title, f.year) in cacheRef.current))
+    const missing = shown.filter(f => !(cacheKey(f.title, f.year) in getPosterCache()))
     if (missing.length === 0) return
     let cancelled = false
     ;(async () => {
@@ -88,13 +78,9 @@ export default function PosterWall({ records, onNeedSettings }: Props) {
           )
         )
         if (cancelled) return
-        setCache(prev => {
-          const next = { ...prev }
-          for (const r of results) if (r) next[r.k] = r.match
-          cacheRef.current = next
-          savePosterCache(next)
-          return next
-        })
+        const next = { ...getPosterCache() }
+        for (const r of results) if (r) next[r.k] = r.match
+        savePosterCache(next)
       }
       if (!cancelled) setFetching(false)
     })().catch(e => {
@@ -162,7 +148,7 @@ export default function PosterWall({ records, onNeedSettings }: Props) {
         apiKey={key}
         onClose={() => setRematch(null)}
         onPick={match => {
-          if (rematch) updateCache(cacheKey(rematch.title, rematch.year), match)
+          if (rematch) savePosterCache({ ...getPosterCache(), [cacheKey(rematch.title, rematch.year)]: match })
           setRematch(null)
         }}
       />

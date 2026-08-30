@@ -37,12 +37,43 @@ export function loadPosterCache(): PosterCache {
   return {}
 }
 
+// —— 共享缓存 store：内存快照 + 订阅，供海报墙与记录表同时使用（useSyncExternalStore） ——
+let memCache: PosterCache | null = null
+const listeners = new Set<() => void>()
+
+/** 当前缓存快照（惰性从 localStorage 加载，之后以内存为准） */
+export function getPosterCache(): PosterCache {
+  if (!memCache) memCache = loadPosterCache()
+  return memCache
+}
+
+export function subscribePosters(fn: () => void): () => void {
+  listeners.add(fn)
+  return () => listeners.delete(fn)
+}
+
 export function savePosterCache(cache: PosterCache) {
+  memCache = cache
   try {
     localStorage.setItem(CACHE_STORAGE, JSON.stringify(cache))
   } catch {
     /* 超出容量时放弃持久化，内存中的结果仍可用 */
   }
+  listeners.forEach(fn => fn())
+}
+
+/**
+ * 查一条记录的海报：先按 片名|年份 精确查，跨年重看的片再退化为按片名找任意年份。
+ * undefined = 尚未匹配过，null = 匹配过但没搜到。
+ */
+export function findPoster(cache: PosterCache, title: string, year: number): PosterMatch | null | undefined {
+  const direct = cache[cacheKey(title, year)]
+  if (direct !== undefined) return direct
+  const prefix = `${title}|`
+  for (const k in cache) {
+    if (k.startsWith(prefix)) return cache[k]
+  }
+  return undefined
 }
 
 export function posterUrl(path: string | null, size: 'w185' | 'w342' | 'w500' = 'w342'): string | null {

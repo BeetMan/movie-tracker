@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useSyncExternalStore } from 'react'
 import { ArrowUpDown, Pencil, Search, Trash2, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { MovieRecord } from '@/types/movie'
 import { formatCategory, brandColor, formatPrice } from '@/types/movie'
+import { findPoster, getPosterCache, posterUrl, subscribePosters } from '@/lib/tmdb'
 
 const PAGE_SIZE = 15
 
@@ -36,6 +37,8 @@ export default function RecordsTable({ records, onEdit, onDelete, onDeleteMany, 
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [regionInput, setRegionInput] = useState('')
   const [confirmDel, setConfirmDel] = useState(false)
+  // 海报缓存（海报墙抓到的结果实时同步过来；未匹配过的影片不显示占位）
+  const posters = useSyncExternalStore(subscribePosters, getPosterCache)
 
   const years = useMemo(() => [...new Set(records.map(r => r.year))].sort((a, b) => b - a), [records])
   const regions = useMemo(() => {
@@ -220,28 +223,33 @@ export default function RecordsTable({ records, onEdit, onDelete, onDeleteMany, 
                   className="mt-1 border-input data-[state=checked]:border-amber-500 data-[state=checked]:bg-amber-500 data-[state=checked]:text-stone-950"
                 />
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="truncate font-medium text-foreground">{r.title}</div>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                        <span className="tabular-nums">{r.date}</span>
-                        <Badge variant="outline" className="text-[10px]" style={{ borderColor: `${catColor}66`, color: catColor }}>{catName}</Badge>
-                        {r.special && <Badge variant="outline" className="border-amber-500/40 text-[10px] text-amber-600 dark:text-amber-400">{r.special}</Badge>}
+                  <div className="flex items-start gap-2.5">
+                    <PosterThumb record={r} posters={posters} className="h-14 w-9" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="font-medium leading-snug text-foreground">{r.title}</div>
+                          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                            <span className="tabular-nums">{r.date}</span>
+                            <Badge variant="outline" className="text-[10px]" style={{ borderColor: `${catColor}66`, color: catColor }}>{catName}</Badge>
+                            {r.special && <Badge variant="outline" className="border-amber-500/40 text-[10px] text-amber-600 dark:text-amber-400">{r.special}</Badge>}
+                          </div>
+                        </div>
+                        <span className="shrink-0 tabular-nums text-sm font-medium text-foreground">
+                          {r.price !== null ? formatPrice(r.price, r.currency) : '—'}
+                        </span>
                       </div>
+                      <div className="mt-1.5 truncate text-xs text-muted-foreground">
+                        {r.cinema || '—'}{r.region ? ` · ${r.region}` : ''}
+                      </div>
+                      {(r.hall || r.seat) && (
+                        <div className="truncate text-xs text-muted-foreground/80">
+                          {r.hall}{r.seat ? ` · ${r.seat}` : ''}
+                        </div>
+                      )}
+                      {r.note && <div className="mt-1 truncate text-xs text-muted-foreground/80">{r.note}</div>}
                     </div>
-                    <span className="shrink-0 tabular-nums text-sm font-medium text-foreground">
-                      {r.price !== null ? formatPrice(r.price, r.currency) : '—'}
-                    </span>
                   </div>
-                  <div className="mt-1.5 truncate text-xs text-muted-foreground">
-                    {r.cinema || '—'}{r.region ? ` · ${r.region}` : ''}
-                  </div>
-                  {(r.hall || r.seat) && (
-                    <div className="truncate text-xs text-muted-foreground/80">
-                      {r.hall}{r.seat ? ` · ${r.seat}` : ''}
-                    </div>
-                  )}
-                  {r.note && <div className="mt-1 truncate text-xs text-muted-foreground/80">{r.note}</div>}
                 </div>
                 <div className="flex shrink-0 flex-col gap-1">
                   <button onClick={() => onEdit(r)} className="rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-amber-600 dark:hover:text-amber-400" title="编辑">
@@ -295,8 +303,13 @@ export default function RecordsTable({ records, onEdit, onDelete, onDeleteMany, 
                   />
                 </td>
                 <td className="max-w-56 px-3 py-2.5">
-                  <div className="truncate font-medium text-foreground" title={r.title}>{r.title}</div>
-                  {r.special && <Badge variant="outline" className="mt-0.5 border-amber-500/40 text-[10px] text-amber-600 dark:text-amber-400">{r.special}</Badge>}
+                  <div className="flex items-center gap-2.5">
+                    <PosterThumb record={r} posters={posters} className="h-12 w-8" />
+                    <div className="min-w-0">
+                      <div className="truncate font-medium text-foreground" title={r.title}>{r.title}</div>
+                      {r.special && <Badge variant="outline" className="mt-0.5 border-amber-500/40 text-[10px] text-amber-600 dark:text-amber-400">{r.special}</Badge>}
+                    </div>
+                  </div>
                 </td>
                 <td className="whitespace-nowrap px-3 py-2.5 tabular-nums text-muted-foreground">{r.date}</td>
                 <td className="whitespace-nowrap px-3 py-2.5">
@@ -383,6 +396,25 @@ export default function RecordsTable({ records, onEdit, onDelete, onDeleteMany, 
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  )
+}
+
+/** 记录行里的海报缩略图；未匹配过的影片返回 null，不占布局 */
+function PosterThumb({ record, posters, className }: {
+  record: MovieRecord
+  posters: ReturnType<typeof getPosterCache>
+  className: string
+}) {
+  const match = findPoster(posters, record.title, record.year)
+  const url = match ? posterUrl(match.poster, 'w185') : null
+  if (!url) return null
+  return (
+    <img
+      src={url}
+      alt=""
+      loading="lazy"
+      className={`shrink-0 rounded border border-border object-cover ${className}`}
+    />
   )
 }
 
