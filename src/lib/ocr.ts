@@ -21,7 +21,7 @@ interface OcrBlock {
  * CF 构建 base='/movie/' 时必须是绝对路径：worker 线程里的相对 URL
  * 会按 worker 脚本位置解析，用 './' 会错；根部署（'./'）直接用 '/'。
  */
-const ASSET_ROOT = import.meta.env.BASE_URL.startsWith('/')
+const ASSET_ROOT = typeof location !== 'undefined' && import.meta.env.BASE_URL.startsWith('/')
   ? `${location.origin}${import.meta.env.BASE_URL}`
   : '/'
 
@@ -90,16 +90,17 @@ export function parseTicketText(fullText: string, lines: OcrLine[]): Partial<Mov
   }
   // 香港票常见：C7、E11 等独立座位号
   if (seats.length === 0) {
-    for (const sm of text.matchAll(/座位[:：]?\s*([A-Z]\d{1,2}(?:\s+[A-Z]\d{1,2})*)/)) {
+    for (const sm of text.matchAll(/座位[:：]?\s*([A-Z]\d{1,2}(?:\s+[A-Z]\d{1,2})*)/g)) {
       seats.push(sm[1])
     }
   }
 
-  // 票价：优先「实付/总价/金额 ¥xx」，其次任意 ¥xx / HK$xx / xx元
+  // 票价：优先「实付/总价」类（实际支付），其次「票价」（原价），再任意 ¥xx / HK$xx / xx元
   let price: number | null = null
   const SYM = '[¥￥]|HK\\$|US\\$|NT\\$|MOP\\$?'
   const pm =
-    new RegExp(`(?:实付|总价|合计|金额|应付|票价)[^0-9]{0,8}(?:${SYM})?\\s*(\\d+(?:\\.\\d{1,2})?)`, 'i').exec(text) ||
+    new RegExp(`(?:实付|总价|合计|应付|金额)[^0-9]{0,8}(?:${SYM})?\\s*(\\d+(?:\\.\\d{1,2})?)`, 'i').exec(text) ||
+    new RegExp(`票价[^0-9]{0,8}(?:${SYM})?\\s*(\\d+(?:\\.\\d{1,2})?)`, 'i').exec(text) ||
     new RegExp(`(?:${SYM})\\s*(\\d+(?:\\.\\d{1,2})?)`, 'i').exec(text) ||
     /(\d+(?:\.\d{1,2})?)\s*元/.exec(text)
   if (pm) {
