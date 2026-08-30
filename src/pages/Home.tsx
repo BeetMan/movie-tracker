@@ -11,6 +11,7 @@ import { useMovies, exportJson, exportCsv, LAST_EXPORT_KEY } from '@/hooks/useMo
 import { useTheme } from '@/hooks/useTheme'
 import StatsOverview from '@/sections/StatsOverview'
 import RecordsTable from '@/sections/RecordsTable'
+import PosterWall from '@/sections/PosterWall'
 import MovieFormDialog from '@/sections/MovieFormDialog'
 import SettingsDialog from '@/sections/SettingsDialog'
 import type { MovieRecord, MovieDraft } from '@/types/movie'
@@ -129,7 +130,7 @@ export default function Home() {
             <Button variant="outline" className={btnCls} onClick={() => setResetOpen(true)}>
               <RotateCcw className="mr-1.5 h-4 w-4" />重置
             </Button>
-            <Button variant="outline" size="icon" className={btnCls} title="截图识别设置" onClick={() => setSettingsOpen(true)}>
+            <Button variant="outline" size="icon" className={btnCls} title="设置" onClick={() => setSettingsOpen(true)}>
               <Settings className="h-4 w-4" />
             </Button>
             <Button variant="outline" size="icon" className={btnCls} title={theme === 'dark' ? '切换为亮色模式' : '切换为深色模式'} onClick={toggle}>
@@ -160,6 +161,7 @@ export default function Home() {
           <TabsList className="mb-4 border border-border bg-card">
             <TabsTrigger value="overview" className="data-[state=active]:bg-amber-500 data-[state=active]:text-stone-950">统计概览</TabsTrigger>
             <TabsTrigger value="records" className="data-[state=active]:bg-amber-500 data-[state=active]:text-stone-950">全部记录</TabsTrigger>
+            <TabsTrigger value="posters" className="data-[state=active]:bg-amber-500 data-[state=active]:text-stone-950">海报墙</TabsTrigger>
           </TabsList>
           <TabsContent value="overview">
             <StatsOverview records={records} />
@@ -172,6 +174,9 @@ export default function Home() {
               onDeleteMany={handleDeleteMany}
               onSetRegion={handleSetRegion}
             />
+          </TabsContent>
+          <TabsContent value="posters">
+            <PosterWall records={records} onNeedSettings={() => setSettingsOpen(true)} />
           </TabsContent>
         </Tabs>
 

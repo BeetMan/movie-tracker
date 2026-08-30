@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { API_KEY_STORAGE, MODEL_STORAGE, DEFAULT_MODEL } from '@/lib/vision'
 import { OCR_MODE_STORAGE, type OcrMode } from '@/lib/ocr'
+import { TMDB_KEY_STORAGE } from '@/lib/tmdb'
 import { toast } from 'sonner'
 
 interface Props {
@@ -17,6 +18,7 @@ export default function SettingsDialog({ open, onOpenChange }: Props) {
   const [mode, setMode] = useState<OcrMode>('ai')
   const [key, setKey] = useState('')
   const [model, setModel] = useState(DEFAULT_MODEL)
+  const [tmdbKey, setTmdbKey] = useState('')
 
   // 对话框每次打开时在渲染期间重新加载设置（React 推荐的 adjust-state-during-render 模式，避免在 effect 中同步 setState）
   const [prevOpen, setPrevOpen] = useState(false)
@@ -26,6 +28,7 @@ export default function SettingsDialog({ open, onOpenChange }: Props) {
       setMode((localStorage.getItem(OCR_MODE_STORAGE) as OcrMode) || 'ai')
       setKey(localStorage.getItem(API_KEY_STORAGE) ?? '')
       setModel(localStorage.getItem(MODEL_STORAGE) || DEFAULT_MODEL)
+      setTmdbKey(localStorage.getItem(TMDB_KEY_STORAGE) ?? '')
     }
   }
 
@@ -33,6 +36,7 @@ export default function SettingsDialog({ open, onOpenChange }: Props) {
     localStorage.setItem(OCR_MODE_STORAGE, mode)
     localStorage.setItem(API_KEY_STORAGE, key.trim())
     localStorage.setItem(MODEL_STORAGE, model.trim() || DEFAULT_MODEL)
+    localStorage.setItem(TMDB_KEY_STORAGE, tmdbKey.trim())
     toast.success('设置已保存')
     onOpenChange(false)
   }
@@ -43,7 +47,7 @@ export default function SettingsDialog({ open, onOpenChange }: Props) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="border-border bg-background text-foreground sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>截图识别设置</DialogTitle>
+          <DialogTitle>设置</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div>
@@ -96,6 +100,20 @@ export default function SettingsDialog({ open, onOpenChange }: Props) {
               </div>
             </>
           )}
+        </div>
+
+        <div className="border-t border-border pt-4">
+          <Label className="mb-1.5 block text-xs text-muted-foreground">TMDB API Key（海报墙，可选）</Label>
+          <Input
+            type="password"
+            className={inputCls}
+            value={tmdbKey}
+            onChange={e => setTmdbKey(e.target.value)}
+            placeholder="32 位 v3 API Key"
+          />
+          <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+            用于「海报墙」匹配影片海报。在 themoviedb.org 免费注册 → 设置 → API → 申请 Developer Key。Key 只保存在本地浏览器。
+          </p>
         </div>
         <DialogFooter>
           <Button variant="outline" className="border-input bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground" onClick={() => onOpenChange(false)}>取消</Button>
