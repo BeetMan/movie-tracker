@@ -1,5 +1,5 @@
 import { useMemo, useState, useSyncExternalStore } from 'react'
-import { ArrowUpDown, Pencil, Search, Trash2, X } from 'lucide-react'
+import { ArrowUpDown, ImageDown, Loader2, Pencil, Search, Trash2, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -9,9 +9,11 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import type { MovieRecord } from '@/types/movie'
 import { formatCategory, brandColor, formatPrice } from '@/types/movie'
 import { findPoster, getPosterCache, posterUrl, subscribePosters } from '@/lib/tmdb'
+import { renderTicketCard } from '@/lib/ticketCard'
 
 const PAGE_SIZE = 15
 
@@ -39,6 +41,27 @@ export default function RecordsTable({ records, onEdit, onDelete, onDeleteMany, 
   const [confirmDel, setConfirmDel] = useState(false)
   // 海报缓存（海报墙抓到的结果实时同步过来；未匹配过的影片不显示占位）
   const posters = useSyncExternalStore(subscribePosters, getPosterCache)
+  // 票根分享卡片
+  const [share, setShare] = useState<{ record: MovieRecord; dataUrl: string } | null>(null)
+
+  const openShare = async (r: MovieRecord) => {
+    setShare({ record: r, dataUrl: '' })
+    try {
+      const match = findPoster(posters, r.title, r.year)
+      const dataUrl = await renderTicketCard(r, match?.poster)
+      setShare({ record: r, dataUrl })
+    } catch {
+      setShare(null)
+    }
+  }
+
+  const downloadShare = () => {
+    if (!share?.dataUrl) return
+    const a = document.createElement('a')
+    a.href = share.dataUrl
+    a.download = `票根_${share.record.title}_${share.record.date}.png`
+    a.click()
+  }
 
   const years = useMemo(() => [...new Set(records.map(r => r.year))].sort((a, b) => b - a), [records])
   const regions = useMemo(() => {
@@ -253,6 +276,9 @@ export default function RecordsTable({ records, onEdit, onDelete, onDeleteMany, 
                   </div>
                 </div>
                 <div className="flex shrink-0 flex-col gap-1">
+                  <button onClick={() => openShare(r)} className="rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-amber-600 dark:hover:text-amber-400" title="生成票根卡片">
+                    <ImageDown className="h-4 w-4" />
+                  </button>
                   <button onClick={() => onEdit(r)} className="rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-amber-600 dark:hover:text-amber-400" title="编辑">
                     <Pencil className="h-4 w-4" />
                   </button>
@@ -339,6 +365,9 @@ export default function RecordsTable({ records, onEdit, onDelete, onDeleteMany, 
                 </td>
                 <td className="px-3 py-2.5">
                   <div className="flex gap-1">
+                    <button onClick={() => openShare(r)} className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-amber-600 dark:hover:text-amber-400" title="生成票根卡片">
+                      <ImageDown className="h-3.5 w-3.5" />
+                    </button>
                     <button onClick={() => onEdit(r)} className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-amber-600 dark:hover:text-amber-400" title="编辑">
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
@@ -396,6 +425,30 @@ export default function RecordsTable({ records, onEdit, onDelete, onDeleteMany, 
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {/* 票根分享卡片预览 */}
+      <Dialog open={!!share} onOpenChange={v => !v && setShare(null)}>
+        <DialogContent className="border-border bg-background text-foreground sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>票根卡片</DialogTitle>
+          </DialogHeader>
+          <div className="flex items-center justify-center rounded-lg border border-border bg-muted/40 p-3">
+            {share?.dataUrl ? (
+              <img src={share.dataUrl} alt={`《${share.record.title}》票根卡片`} className="max-h-[420px] w-auto rounded-md" />
+            ) : (
+              <div className="flex h-40 items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin text-amber-500 dark:text-amber-400" />正在生成…
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" className="border-input bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground"
+              onClick={() => setShare(null)}>关闭</Button>
+            <Button className="bg-amber-500 text-stone-950 hover:bg-amber-400" disabled={!share?.dataUrl} onClick={downloadShare}>
+              <ImageDown className="mr-1.5 h-4 w-4" />下载 PNG
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
