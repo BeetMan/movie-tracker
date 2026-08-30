@@ -16,6 +16,7 @@ import MovieFormDialog from '@/sections/MovieFormDialog'
 import SettingsDialog from '@/sections/SettingsDialog'
 import type { MovieRecord, MovieDraft } from '@/types/movie'
 import { listRegions } from '@/types/movie'
+import { version } from '../../package.json'
 
 export default function Home() {
   const { records, addRecord, updateRecord, deleteRecord, restoreRecords, deleteMany, setRegionFor, importRecords, mergeRecords, resetToBase, isCustomized, suggestRegion, baseCount } = useMovies()
@@ -222,6 +223,7 @@ export default function Home() {
 
         <footer className="mt-10 border-t border-border/60 pt-4 text-xs text-muted-foreground">
           数据维护：在「全部记录」中直接增删改，或导出 JSON 后用「导入」整体替换。当前数据仅存储于本浏览器，换设备前请先导出。
+          <span className="ml-2 text-muted-foreground/60">观影数据库 v{version}</span>
         </footer>
       </div>
 

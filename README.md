@@ -2,8 +2,9 @@
 
 [![CI](https://github.com/BeetMan/movie-tracker/actions/workflows/ci.yml/badge.svg)](https://github.com/BeetMan/movie-tracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-1.0.0-amber)](https://github.com/BeetMan/movie-tracker/releases)
 
-个人影院观影记录管理应用。记录每一场电影：片名、日期、影院、影厅、座位、票价（多币种）、制式（IMAX / 杜比视界 / CINITY / 中国巨幕 / 4DX 等），并生成观影统计图表。支持票根截图识别自动填表。
+个人影院观影记录管理应用。记录每一场电影：片名、日期、影院、影厅、座位、票价（多币种）、制式（IMAX / 杜比视界 / CINITY / 中国巨幕 / 4DX 等），并生成观影统计图表。支持票根截图识别自动填表、TMDB 海报墙。
 
 纯前端，无后端，数据保存在浏览器 localStorage，不上传任何服务器。
 
@@ -11,15 +12,21 @@
 
 ## 功能
 
-- **记录管理**：增删改查，支持搜索、多维度筛选（年份 / 地区 / 制式 / 影院）、排序、分页
-  - 删除后可「撤销」恢复；新增时自动检测同片名同日期的疑似重复记录
+- **记录管理**：增删改查，搜索、多维度筛选（年份 / 地区 / 制式 / 影院）、排序、分页
+  - 删除后可「撤销」；新增时自动检测同片名同日期的疑似重复记录
   - 复选批量操作：批量删除（可撤销）、批量修改地区
-- **统计概览**（recharts）：场次 / 影片 / 影院 / 花费总览卡片，年度 & 月度场次与花费趋势、制式分布饼图、常去影院 TOP 10、二刷影片榜、年度观影日历热力图
+  - 移动端自动切换为卡片布局，桌面端为表格
+  - 连续录入模式：「保存并继续下一张」，攒票根批量补录不中断
+  - 快捷键：`N` 记一笔、`/` 聚焦搜索
+- **海报墙**（TMDB）：按片名去重展示海报，年份筛选、二刷角标；错配可手动换海报，匹配结果缓存本地；记录列表同步显示海报缩略图
+- **统计概览**（recharts）：总览卡片、年度 & 月度场次与花费趋势、制式分布饼图、常去影院 TOP 10、二刷影片榜、年度观影日历热力图、与上一年的同期对比
 - **票根识别**（双模式）：
-  - **AI 模式**：浏览器直连 Moonshot API（OpenAI 兼容 vision 格式），Key 存 localStorage，模型默认 `kimi-latest`
-  - **本地 OCR**：tesseract.js 纯浏览器端离线识别，中英文语言包内置（`public/tessdata/`）
+  - **AI 模式**：浏览器直连视觉大模型（OpenAI 兼容格式），支持 **Moonshot（Kimi）/ DeepSeek** 两家服务方，Key 与模型各自独立存储；自动适配锁死 `temperature=1` 的新模型
+  - **本地 OCR**：tesseract.js 纯浏览器端离线识别，引擎 / WASM / 中英文语言包全部自托管（`public/tess`、`public/tessdata`），不依赖 CDN
+  - 识别完成后 toast 列出自动填了哪些字段
 - **数据安全**：
-  - JSON / CSV 导出备份，JSON 导入整体恢复，可一键重置为内置演示数据
+  - JSON / CSV 导出备份；导入可选「合并」（按 片名+日期+影院+座位 去重）或「整体替换」
+  - 设置备份：识别方式、各服务方 Key / 模型、主题、海报匹配缓存一键导出/导入
   - 超过 30 天未导出时显示备份提醒横幅
   - 全局错误边界兜底，崩溃页面也可一键导出数据
 - **多币种票价**：CNY / HKD / MOP / TWD / USD / EUR / JPY / KRW，统计时分币种汇总
@@ -43,26 +50,31 @@ npm run lint     # ESLint
 ```
 src/
 ├── data/movies.json        # 内置演示数据（185 条）
-├── types/movie.ts          # 数据模型、制式词表与归类、币种、品牌色
+├── types/movie.ts          # 数据模型、制式词表与归类、币种、日期归一化
 ├── hooks/
-│   ├── useMovies.ts        # 数据层：CRUD、localStorage 持久化、导入导出、备份提醒
+│   ├── useMovies.ts        # 数据层：CRUD、合并导入、localStorage 持久化、导入导出
 │   └── useTheme.ts         # 主题切换 + recharts 图表配色
 ├── lib/
-│   ├── vision.ts           # AI 票根识别（Moonshot API）
-│   ├── ocr.ts              # 本地 OCR 票根识别（tesseract.js）
+│   ├── vision.ts           # AI 票根识别（服务方注册表：Moonshot / DeepSeek）
+│   ├── ocr.ts              # 本地 OCR 票根识别（tesseract.js，全自托管）
+│   ├── tmdb.ts             # TMDB 海报匹配 + 可订阅的本地缓存 store
+│   ├── settings.ts         # 设置导出/导入
 │   └── stats.ts            # 统计聚合函数
-├── sections/               # 页面模块：记录表格 / 表单 / 统计 / 设置
+├── sections/               # 记录表格 / 表单 / 统计 / 海报墙 / 设置
 ├── components/
 │   ├── ErrorBoundary.tsx   # 全局错误边界（带数据导出逃生按钮）
 │   └── ui/                 # shadcn/ui 组件
 └── pages/Home.tsx          # 主页面
+public/
+├── tess/                   # 自托管 OCR 引擎（worker + WASM 核心）
+└── tessdata/               # 中英文语言包
 ```
 
 ## 数据说明
 
 - 运行时数据存 localStorage（key：`movie-db-v1`），读取优先级：localStorage > 内置 `movies.json`
 - 建议定期通过「导出 JSON」备份；清除浏览器数据会导致记录丢失
-- 迁移设备：旧设备导出 JSON → 新设备「导入」
+- 迁移设备：旧设备导出 JSON + 设置备份 → 新设备分别导入，海报匹配结果也一并带走
 
 ## 部署
 
