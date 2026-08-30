@@ -16,21 +16,41 @@ interface OcrBlock {
   paragraphs?: { lines?: { text: string; bbox: OcrLine['bbox'] }[] }[]
 }
 
+/**
+ * OCR 资源的绝对根路径（以 / 结尾）。
+ * CF 构建 base='/movie/' 时必须是绝对路径：worker 线程里的相对 URL
+ * 会按 worker 脚本位置解析，用 './' 会错；根部署（'./'）直接用 '/'。
+ */
+const ASSET_ROOT = import.meta.env.BASE_URL.startsWith('/')
+  ? `${location.origin}${import.meta.env.BASE_URL}`
+  : '/'
+
+const OCR_TIMEOUT = 180_000
+
 /** 本地 OCR：在浏览器内识别图片文字，再按票面规则解析字段 */
 export async function ocrExtract(
   dataUrl: string,
   onProgress?: (pct: number) => void
 ): Promise<Partial<MovieDraft>> {
   const { createWorker } = await import('tesseract.js')
-  const worker = await createWorker(['chi_sim', 'eng'], 1, {
-    langPath: '/tessdata',
-    gzip: false,
-    logger: (m: { status: string; progress: number }) => {
-      if (m.status === 'recognizing text' && onProgress) onProgress(Math.round(m.progress * 100))
-    },
-  })
+  // worker 脚本 / WASM 核心 / 语言包全部自托管（public/tess、public/tessdata），不依赖 CDN
+  const worker = await withTimeout(
+    createWorker(['chi_sim', 'eng'], 1, {
+      workerPath: `${ASSET_ROOT}tess/worker.min.js`,
+      corePath: `${ASSET_ROOT}tess/core`,
+      langPath: `${ASSET_ROOT}tessdata`,
+      gzip: false,
+      logger: (m: { status: string; progress: number }) => {
+        if (m.status === 'recognizing text' && onProgress) onProgress(Math.round(m.progress * 100))
+      },
+    }),
+    'OCR 引擎加载超时（首次需下载约 15MB 模型），请检查网络后重试'
+  )
   try {
-    const { data } = await worker.recognize(dataUrl, {}, { text: true, blocks: true } as never)
+    const { data } = await withTimeout(
+      worker.recognize(dataUrl, {}, { text: true, blocks: true } as never),
+      '识别超时，请换一张更小的截图重试'
+    )
     const lines: OcrLine[] = ((data.blocks ?? []) as OcrBlock[])
       .flatMap(b => b.paragraphs ?? [])
       .flatMap(p => p.lines ?? [])
@@ -40,6 +60,13 @@ export async function ocrExtract(
   } finally {
     await worker.terminate()
   }
+}
+
+function withTimeout<T>(p: Promise<T>, msg: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error(msg)), OCR_TIMEOUT)),
+  ])
 }
 
 const APP_NOISE = /淘票票|猫眼|取票|订单|票根|二维码|验票|购票|影评|想看|看过|小程序|凭此|检票|入场|副券/
