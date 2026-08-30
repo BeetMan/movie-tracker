@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,6 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { PROVIDERS, PROVIDER_STORAGE } from '@/lib/vision'
 import { OCR_MODE_STORAGE, type OcrMode } from '@/lib/ocr'
 import { TMDB_KEY_STORAGE } from '@/lib/tmdb'
+import { exportSettings, importSettings } from '@/lib/settings'
+import { Download, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface Props {
@@ -43,6 +45,25 @@ export default function SettingsDialog({ open, onOpenChange }: Props) {
   const cred = creds[provider.id] ?? { key: '', model: provider.defaultModel }
   const setCred = (patch: Partial<{ key: string; model: string }>) =>
     setCreds(prev => ({ ...prev, [provider.id]: { ...cred, ...patch } }))
+
+  const settingsFileRef = useRef<HTMLInputElement>(null)
+
+  const handleImportSettings = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      try {
+        const n = importSettings(String(reader.result))
+        toast.success(`已导入 ${n} 项设置，即将刷新页面生效`)
+        setTimeout(() => window.location.reload(), 800)
+      } catch {
+        toast.error('导入失败：请使用本站导出的设置备份文件')
+      }
+    }
+    reader.readAsText(file)
+    e.target.value = ''
+  }
 
   const save = () => {
     localStorage.setItem(OCR_MODE_STORAGE, mode)
@@ -148,6 +169,25 @@ export default function SettingsDialog({ open, onOpenChange }: Props) {
           />
           <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
             用于「海报墙」匹配影片海报。在 themoviedb.org 免费注册 → 设置 → API → 申请 Developer Key。Key 只保存在本地浏览器。
+          </p>
+        </div>
+        <div className="border-t border-border pt-4">
+          <Label className="mb-1.5 block text-xs text-muted-foreground">设置备份</Label>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm"
+              className="border-input bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground"
+              onClick={exportSettings}>
+              <Download className="mr-1.5 h-3.5 w-3.5" />导出设置
+            </Button>
+            <Button variant="outline" size="sm"
+              className="border-input bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground"
+              onClick={() => settingsFileRef.current?.click()}>
+              <Upload className="mr-1.5 h-3.5 w-3.5" />导入设置
+            </Button>
+            <input ref={settingsFileRef} type="file" accept="application/json" className="hidden" onChange={handleImportSettings} />
+          </div>
+          <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+            包含识别方式、各服务方 Key / 模型、主题和海报匹配缓存（不含观影记录）。文件含 API Key 明文，请勿分享他人。
           </p>
         </div>
         <DialogFooter>

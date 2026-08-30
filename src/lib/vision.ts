@@ -25,14 +25,13 @@ export const PROVIDERS: VisionProvider[] = [
     consoleUrl: 'platform.moonshot.cn',
     keyStorage: 'movie-db-apikey',   // 沿用旧 Key，老用户无感迁移
     modelStorage: 'movie-db-model',
-    // kimi-latest 已下线（404），默认用长期可用的视觉预览模型
-    defaultModel: 'moonshot-v1-128k-vision-preview',
+    defaultModel: 'kimi-k2.7-code',
     models: [
+      'kimi-k2.7-code',
+      'kimi-k3',
       'moonshot-v1-128k-vision-preview',
       'moonshot-v1-32k-vision-preview',
       'moonshot-v1-8k-vision-preview',
-      'kimi-k3',
-      'kimi-k2.7-code',
       'kimi-thinking-preview',
     ],
   },
@@ -108,10 +107,11 @@ export async function extractFromImage(dataUrl: string): Promise<Partial<MovieDr
   const apiKey = getApiKey(provider)
   if (!apiKey) throw new Error('NO_API_KEY')
 
-  // 部分新模型（K2.7 Code / K3 / thinking 系）锁死 temperature=1，
-  // 先用 0.1 请求，若服务端明确报 temperature 不支持则自动用 1 重试
-  let res = await send(provider, apiKey, dataUrl, 0.1)
-  if (res.status === 400) {
+  // 部分新模型（K2.7 Code / K3 / thinking 系）锁死 temperature=1，直接发 1；
+  // 其余模型先带 0.1，若服务端明确报 temperature 不支持再用 1 重试
+  const locked = /thinking|k2\.\d|k3/i.test(getModel(provider))
+  let res = await send(provider, apiKey, dataUrl, locked ? 1 : 0.1)
+  if (res.status === 400 && !locked) {
     const text = await res.clone().text().catch(() => '')
     if (/temperature/i.test(text)) res = await send(provider, apiKey, dataUrl, 1)
     else return throwHttpError(res.status, text)

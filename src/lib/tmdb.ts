@@ -4,7 +4,7 @@
  */
 
 export const TMDB_KEY_STORAGE = 'movie-db-tmdb-key'
-const CACHE_STORAGE = 'movie-db-posters-v1'
+export const POSTER_CACHE_STORAGE = 'movie-db-posters-v1'
 
 export interface PosterMatch {
   id: number
@@ -29,7 +29,7 @@ export function getTmdbKey(): string {
 
 export function loadPosterCache(): PosterCache {
   try {
-    const raw = localStorage.getItem(CACHE_STORAGE)
+    const raw = localStorage.getItem(POSTER_CACHE_STORAGE)
     if (raw) return JSON.parse(raw) as PosterCache
   } catch {
     /* ignore */
@@ -55,7 +55,7 @@ export function subscribePosters(fn: () => void): () => void {
 export function savePosterCache(cache: PosterCache) {
   memCache = cache
   try {
-    localStorage.setItem(CACHE_STORAGE, JSON.stringify(cache))
+    localStorage.setItem(POSTER_CACHE_STORAGE, JSON.stringify(cache))
   } catch {
     /* 超出容量时放弃持久化，内存中的结果仍可用 */
   }

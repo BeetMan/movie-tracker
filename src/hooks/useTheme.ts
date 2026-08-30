@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 
-const THEME_STORAGE = 'movie-db-theme'
+export const THEME_STORAGE = 'movie-db-theme'
 export type Theme = 'dark' | 'light'
 
 export function getTheme(): Theme {
