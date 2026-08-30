@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { ImagePlus, Loader2, ScanLine, X } from 'lucide-react'
+import { CalendarDays, ImagePlus, Loader2, ScanLine, X } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Calendar } from '@/components/ui/calendar'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
 import type { MovieRecord, MovieDraft } from '@/types/movie'
@@ -23,6 +25,8 @@ interface Props {
   regions: string[]
   /** 历史记录中的影院列表（按频次降序），用于自动补全 */
   cinemas: string[]
+  /** 给定影院，返回其历史影厅列表（按频次降序），用于影厅联想 */
+  suggestHalls: (cinema: string) => string[]
 }
 
 const empty: MovieDraft = {
@@ -30,12 +34,26 @@ const empty: MovieDraft = {
   price: null, currency: 'CNY', note: null, special: null, region: '',
 }
 
-export default function MovieFormDialog({ open, onOpenChange, initial, onSubmit, onNeedSettings, suggestRegion, regions, cinemas }: Props) {
+/** YYYY.M.D（不补零，与现有数据一致） */
+function fmtDate(d: Date): string {
+  return `${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()}`
+}
+
+/** 把 YYYY.M.D 解析成 Date；含 ? 或不合法返回 undefined */
+function parseDate(s: string): Date | undefined {
+  const m = /^(\d{4})\.(\d{1,2})\.(\d{1,2})$/.exec(s.trim())
+  if (!m) return undefined
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  return Number.isNaN(d.getTime()) ? undefined : d
+}
+
+export default function MovieFormDialog({ open, onOpenChange, initial, onSubmit, onNeedSettings, suggestRegion, regions, cinemas, suggestHalls }: Props) {
   const [form, setForm] = useState<MovieDraft>(empty)
   const [priceText, setPriceText] = useState('')
   const [extracting, setExtracting] = useState(false)
   const [ocrPct, setOcrPct] = useState<number | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
+  const [calOpen, setCalOpen] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -47,7 +65,8 @@ export default function MovieFormDialog({ open, onOpenChange, initial, onSubmit,
         setForm({ title, date, format, cinema, hall, seat, price, currency: initial.currency ?? 'CNY', note, special, region })
         setPriceText(price === null ? '' : String(price))
       } else {
-        setForm(empty)
+        // 新增默认填今天（看完当天记录是最高频场景）
+        setForm({ ...empty, date: fmtDate(new Date()) })
         setPriceText('')
       }
     }
@@ -180,7 +199,26 @@ export default function MovieFormDialog({ open, onOpenChange, initial, onSubmit,
 
         <div className="grid gap-4 py-2 sm:grid-cols-2">
           {field('影片 *', <Input className={inputCls} value={form.title} onChange={e => set('title', e.target.value)} placeholder="片名" />, true)}
-          {field('日期 *（YYYY.M.D）', <Input className={inputCls} value={form.date} onChange={e => set('date', e.target.value)} placeholder="2026.7.24" />)}
+          {field('日期 *（YYYY.M.D）', (
+            <div className="flex gap-2">
+              <Input className={`${inputCls} flex-1`} value={form.date} onChange={e => set('date', e.target.value)} placeholder="2026.7.24" />
+              <Popover open={calOpen} onOpenChange={setCalOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="icon" className={`${inputCls} shrink-0`} title="从日历选择">
+                    <CalendarDays className="h-4 w-4" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto border-border bg-popover p-0" align="end">
+                  <Calendar
+                    mode="single"
+                    selected={parseDate(form.date)}
+                    defaultMonth={parseDate(form.date)}
+                    onSelect={d => { if (d) { set('date', fmtDate(d)); setCalOpen(false) } }}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+          ))}
           {field('格式', <>
             <Input className={inputCls} value={form.format} onChange={e => set('format', e.target.value)} placeholder="选择或手动输入" list="format-options" />
             <datalist id="format-options">
@@ -202,7 +240,12 @@ export default function MovieFormDialog({ open, onOpenChange, initial, onSubmit,
               {regions.map(r => <option key={r} value={r} />)}
             </datalist>
           </>)}
-          {field('影厅', <Input className={inputCls} value={form.hall} onChange={e => set('hall', e.target.value)} placeholder="杜比视界·全景声厅" />)}
+          {field('影厅', <>
+            <Input className={inputCls} value={form.hall} onChange={e => set('hall', e.target.value)} placeholder="杜比视界·全景声厅" list="hall-options" />
+            <datalist id="hall-options">
+              {suggestHalls(form.cinema).map(h => <option key={h} value={h} />)}
+            </datalist>
+          </>)}
           {field('座位', <Input className={inputCls} value={form.seat} onChange={e => set('seat', e.target.value)} placeholder="5排13座" />)}
           {field('票价（留空表示未知）', (
             <div className="flex gap-2">

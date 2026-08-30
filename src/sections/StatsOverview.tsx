@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { MovieRecord } from '@/types/movie'
 import { brandColor, formatPrice } from '@/types/movie'
-import { overallStats, spendByCurrency, byYear, byFormat, topCinemas, byMonth, topRewatched, dayCounts } from '@/lib/stats'
+import { overallStats, spendByCurrency, byYear, byFormat, topCinemas, byMonth, topRewatched, dayCounts, yoyCompare } from '@/lib/stats'
 import { chartPalette, useTheme } from '@/hooks/useTheme'
 
 export default function StatsOverview({ records }: { records: MovieRecord[] }) {
@@ -43,6 +43,7 @@ export default function StatsOverview({ records }: { records: MovieRecord[] }) {
   const cinemas = useMemo(() => topCinemas(filtered), [filtered])
   const rewatched = useMemo(() => topRewatched(filtered), [filtered])
   const heat = useMemo(() => (isAll ? null : dayCounts(records, Number(year))), [records, year, isAll])
+  const yoy = useMemo(() => (isAll ? null : yoyCompare(records, Number(year))), [records, year, isAll])
   const hasForeign = spending.some(c => c.currency !== 'CNY')
 
   const trendData = isAll ? yearly : monthly
@@ -108,6 +109,16 @@ export default function StatsOverview({ records }: { records: MovieRecord[] }) {
           </Card>
         ))}
       </div>
+
+      {yoy && (yoy.prevCount > 0 || yoy.prevSpend > 0) && (
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-1 rounded-lg border border-border bg-card px-4 py-3 text-sm">
+          <span className="text-muted-foreground">
+            较 {Number(year) - 1} 年同期（1–{yoy.maxMonth}月）
+          </span>
+          <Delta label="场次" cur={yoy.count} prev={yoy.prevCount} />
+          {yoy.prevSpend > 0 && <Delta label="花费" cur={yoy.spend} prev={yoy.prevSpend} prefix="¥" />}
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-5">
         <Card className="border-border bg-card lg:col-span-3">
@@ -267,5 +278,24 @@ export default function StatsOverview({ records }: { records: MovieRecord[] }) {
         </Card>
       )}
     </div>
+  )
+}
+
+/** 同比数字：当前值 vs 去年同期，带涨跌箭头和百分比 */
+function Delta({ label, cur, prev, prefix = '' }: { label: string; cur: number; prev: number; prefix?: string }) {
+  const diff = cur - prev
+  const pct = prev > 0 ? Math.round((diff / prev) * 100) : null
+  const up = diff > 0
+  return (
+    <span className="flex items-baseline gap-2">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-semibold tabular-nums text-foreground">{prefix}{cur}</span>
+      <span className="text-xs text-muted-foreground">vs {prefix}{prev}</span>
+      {diff !== 0 && (
+        <span className={`text-xs font-medium tabular-nums ${up ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
+          {up ? '↑' : '↓'}{prefix}{Math.abs(diff)}{pct !== null ? `（${up ? '+' : ''}${pct}%）` : ''}
+        </span>
+      )}
+    </span>
   )
 }

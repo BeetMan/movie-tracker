@@ -84,6 +84,39 @@ export function byMonth(records: MovieRecord[]) {
   return counts.map((v, i) => ({ month: `${i + 1}月`, 场次: v, 花费: Math.round(spends[i]) }))
 }
 
+/**
+ * 同比：选中年份 vs 上一年的「同期」对比。
+ * 同期 = 当年已有记录的最大月份，上一年只统计到同一月份，避免年中对比全年不公平。
+ * 上一年没有任何记录时返回 null（不显示）。
+ */
+export function yoyCompare(records: MovieRecord[], year: number) {
+  const monthOf = (date: string) => {
+    const m = /^\d{4}\.(\d{2})/.exec(date)
+    return m ? parseInt(m[1], 10) : null // 月份未知的记录视为落在范围内
+  }
+  const cur = records.filter(r => r.year === year)
+  if (cur.length === 0) return null
+  let maxMonth = 0
+  for (const r of cur) maxMonth = Math.max(maxMonth, monthOf(r.date) ?? 0)
+  if (maxMonth === 0) maxMonth = 12 // 月份全部未知时按全年比
+  const prevAll = records.filter(r => r.year === year - 1)
+  if (prevAll.length === 0) return null
+  const inRange = (r: MovieRecord) => {
+    const m = monthOf(r.date)
+    return m === null || m <= maxMonth
+  }
+  const prev = prevAll.filter(inRange)
+  const curR = cur.filter(inRange)
+  const sumCny = (list: MovieRecord[]) => list.reduce((s, r) => s + cnySpend(r), 0)
+  return {
+    maxMonth,
+    count: curR.length,
+    prevCount: prev.length,
+    spend: Math.round(sumCny(curR)),
+    prevSpend: Math.round(sumCny(prev)),
+  }
+}
+
 /** 某一年每天（月-日）的观影场次，用于日历热力图；日期不完整的记录（如 2024.05.?）跳过 */
 export function dayCounts(records: MovieRecord[], year: number): Map<string, number> {
   const map = new Map<string, number>()

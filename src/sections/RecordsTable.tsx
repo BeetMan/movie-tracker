@@ -205,7 +205,63 @@ export default function RecordsTable({ records, onEdit, onDelete, onDeleteMany, 
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-lg border border-border">
+      {/* 移动端：卡片列表 */}
+      <div className="space-y-2 md:hidden">
+        {slice.map(r => {
+          const catName = formatCategory(r)
+          const catColor = brandColor(catName)
+          return (
+            <div key={r.id} className={`rounded-lg border border-border bg-card p-3 ${validSelected.has(r.id) ? 'border-amber-500/40 bg-amber-400/5' : ''}`}>
+              <div className="flex items-start gap-2.5">
+                <Checkbox
+                  checked={validSelected.has(r.id)}
+                  onCheckedChange={v => toggleOne(r.id, !!v)}
+                  aria-label={`选择《${r.title}》`}
+                  className="mt-1 border-input data-[state=checked]:border-amber-500 data-[state=checked]:bg-amber-500 data-[state=checked]:text-stone-950"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate font-medium text-foreground">{r.title}</div>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                        <span className="tabular-nums">{r.date}</span>
+                        <Badge variant="outline" className="text-[10px]" style={{ borderColor: `${catColor}66`, color: catColor }}>{catName}</Badge>
+                        {r.special && <Badge variant="outline" className="border-amber-500/40 text-[10px] text-amber-600 dark:text-amber-400">{r.special}</Badge>}
+                      </div>
+                    </div>
+                    <span className="shrink-0 tabular-nums text-sm font-medium text-foreground">
+                      {r.price !== null ? formatPrice(r.price, r.currency) : '—'}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 truncate text-xs text-muted-foreground">
+                    {r.cinema || '—'}{r.region ? ` · ${r.region}` : ''}
+                  </div>
+                  {(r.hall || r.seat) && (
+                    <div className="truncate text-xs text-muted-foreground/80">
+                      {r.hall}{r.seat ? ` · ${r.seat}` : ''}
+                    </div>
+                  )}
+                  {r.note && <div className="mt-1 truncate text-xs text-muted-foreground/80">{r.note}</div>}
+                </div>
+                <div className="flex shrink-0 flex-col gap-1">
+                  <button onClick={() => onEdit(r)} className="rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-amber-600 dark:hover:text-amber-400" title="编辑">
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                  <button onClick={() => onDelete(r)} className="rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-rose-500 dark:hover:text-rose-400" title="删除">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+        {slice.length === 0 && (
+          <div className="rounded-lg border border-border px-3 py-10 text-center text-sm text-muted-foreground">没有匹配的记录</div>
+        )}
+      </div>
+
+      {/* 桌面端：表格 */}
+      <div className="hidden overflow-x-auto rounded-lg border border-border md:block">
         <table className="w-full min-w-[900px] text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/60 text-left text-xs text-muted-foreground">

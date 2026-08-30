@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useCallback } from 'react'
 import { Clapperboard, Download, FileSpreadsheet, Info, Moon, Plus, RotateCcw, Settings, Sun, Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -40,6 +40,14 @@ export default function Home() {
     }
     return [...count.entries()].sort((a, b) => b[1] - a[1]).map(([name]) => name)
   })()
+  // 影院 → 影厅频次表，用于表单里的影厅联想
+  const suggestHalls = useCallback((cinema: string) => {
+    const count = new Map<string, number>()
+    for (const r of records) {
+      if (r.cinema === cinema.trim() && r.hall) count.set(r.hall, (count.get(r.hall) ?? 0) + 1)
+    }
+    return [...count.entries()].sort((a, b) => b[1] - a[1]).map(([name]) => name)
+  }, [records])
 
   const handleSubmit = (draft: MovieDraft) => {
     if (editing) {
@@ -181,6 +189,7 @@ export default function Home() {
         suggestRegion={suggestRegion}
         regions={regionOptions}
         cinemas={cinemaOptions}
+        suggestHalls={suggestHalls}
       />
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
 
