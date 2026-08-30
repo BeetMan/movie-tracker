@@ -3,7 +3,15 @@ import { CURRENCIES, FORMAT_OPTIONS, SPECIAL_HALL_OPTIONS } from '@/types/movie'
 
 export const API_KEY_STORAGE = 'movie-db-apikey'
 export const MODEL_STORAGE = 'movie-db-model'
-export const DEFAULT_MODEL = 'kimi-latest'
+// kimi-latest 已下线（404），默认用长期可用的视觉预览模型
+export const DEFAULT_MODEL = 'moonshot-v1-128k-vision-preview'
+/** 设置页模型输入框的联想选项（需支持视觉） */
+export const SUGGESTED_MODELS = [
+  'moonshot-v1-128k-vision-preview',
+  'moonshot-v1-32k-vision-preview',
+  'moonshot-v1-8k-vision-preview',
+  'kimi-thinking-preview',
+]
 
 export function getApiKey(): string {
   return localStorage.getItem(API_KEY_STORAGE) ?? ''
@@ -38,7 +46,7 @@ const PROMPT = `这是一张电影取票/购票页面的截图（可能来自淘
 
 {
   "title": "影片名（字符串）",
-  "date": "放映日期，格式 YYYY.M.D，如 2026.3.15（字符串）",
+  "date": "放映日期，格式 YYYY.MM.DD（月日不足两位补零），如 2026.03.15（字符串）",
   "format": "影片拷贝版本，优先从这些值中选：${FORMAT_OPTIONS.join('、')}（字符串）",
   "cinema": "影院全称，含分店名（字符串）",
   "hall": "影厅名称（字符串）",
@@ -81,6 +89,9 @@ export async function extractFromImage(dataUrl: string): Promise<Partial<MovieDr
   })
 
   if (res.status === 401) throw new Error('API Key 无效，请检查设置')
+  if (res.status === 404) {
+    throw new Error(`模型「${getModel()}」不存在或当前 Key 无权限，请到设置中更换模型（如 ${DEFAULT_MODEL}）`, { cause: 'MODEL_NOT_FOUND' })
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => '')
     throw new Error(`识别请求失败（${res.status}）${text.slice(0, 120)}`)

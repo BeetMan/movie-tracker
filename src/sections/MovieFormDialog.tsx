@@ -40,6 +40,16 @@ function fmtDate(d: Date): string {
   return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())}`
 }
 
+/** 把 YYYY.M.D 归一化成 YYYY.MM.DD（补零）；含 ? 或无法解析的原样返回 */
+function normalizeDate(s: string): string {
+  const t = s.trim()
+  const full = /^(\d{4})\.(\d{1,2})\.(\d{1,2})$/.exec(t)
+  if (full) return `${full[1]}.${full[2].padStart(2, '0')}.${full[3].padStart(2, '0')}`
+  const unknownDay = /^(\d{4})\.(\d{1,2})\.(\?|？)$/.exec(t)
+  if (unknownDay) return `${unknownDay[1]}.${unknownDay[2].padStart(2, '0')}.?`
+  return t
+}
+
 /** 把 YYYY.M.D 解析成 Date；含 ? 或不合法返回 undefined */
 function parseDate(s: string): Date | undefined {
   const m = /^(\d{4})\.(\d{1,2})\.(\d{1,2})$/.exec(s.trim())
@@ -128,7 +138,7 @@ export default function MovieFormDialog({ open, onOpenChange, initial, onSubmit,
     onSubmit({
       ...form,
       title: form.title.trim(),
-      date: form.date.trim(),
+      date: normalizeDate(form.date),
       region: form.region?.trim() || suggestRegion(form.cinema),
       price: price !== null && !Number.isNaN(price) ? price : null,
       note: form.note?.trim() || null,

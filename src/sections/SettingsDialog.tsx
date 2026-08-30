@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { API_KEY_STORAGE, MODEL_STORAGE, DEFAULT_MODEL } from '@/lib/vision'
+import { API_KEY_STORAGE, MODEL_STORAGE, DEFAULT_MODEL, SUGGESTED_MODELS } from '@/lib/vision'
 import { OCR_MODE_STORAGE, type OcrMode } from '@/lib/ocr'
 import { TMDB_KEY_STORAGE } from '@/lib/tmdb'
 import { toast } from 'sonner'
@@ -96,7 +96,14 @@ export default function SettingsDialog({ open, onOpenChange }: Props) {
                   value={model}
                   onChange={e => setModel(e.target.value)}
                   placeholder={DEFAULT_MODEL}
+                  list="model-options"
                 />
+                <datalist id="model-options">
+                  {SUGGESTED_MODELS.map(m => <option key={m} value={m} />)}
+                </datalist>
+                <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+                  默认 {DEFAULT_MODEL}。若提示模型不存在 / 无权限（404），从这里换一个可用的视觉模型。
+                </p>
               </div>
             </>
           )}
