@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/BeetMan/movie-tracker/actions/workflows/ci.yml/badge.svg)](https://github.com/BeetMan/movie-tracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.1.0-amber)](https://github.com/BeetMan/movie-tracker/releases)
+[![Version](https://img.shields.io/badge/version-1.1.1-amber)](https://github.com/BeetMan/movie-tracker/releases)
 
 个人影院观影记录管理应用。记录每一场电影：片名、日期、影院、影厅、座位、票价（多币种）、制式（IMAX / 杜比视界 / CINITY / 中国巨幕 / 4DX 等），并生成观影统计图表。支持票根截图识别自动填表、TMDB 海报墙。
 

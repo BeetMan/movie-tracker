@@ -5,9 +5,11 @@ export default {
   fetch(request, env) {
     const url = new URL(request.url)
     const base = env.BASE_PATH || '/movie'
+    // /movie → 301 到 /movie/，规范 URL（相对路径资产、路由匹配都依赖它）
     if (url.pathname === base) {
-      url.pathname = '/'
-    } else if (url.pathname.startsWith(base + '/')) {
+      return Response.redirect(url.origin + base + '/' + url.search, 301)
+    }
+    if (url.pathname.startsWith(base + '/')) {
       url.pathname = url.pathname.slice(base.length)
     }
     return env.ASSETS.fetch(new Request(url.toString(), request))
