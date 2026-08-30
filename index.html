@@ -13,7 +13,19 @@
     ></script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- 启动屏：HTML 到达即渲染，JS 就绪后由 React 接管替换 -->
+      <div id="splash" style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#0c0a09;font-family:system-ui,sans-serif">
+        <img src="%BASE_URL%favicon.svg" width="56" height="56" alt="" style="border-radius:14px" />
+        <div style="font-size:18px;font-weight:600;color:#fafaf9">观影数据库</div>
+        <div style="width:22px;height:22px;border-radius:50%;border:2.5px solid #44403c;border-top-color:#f59e0b;animation:splash-spin 0.8s linear infinite"></div>
+      </div>
+      <style>@keyframes splash-spin{to{transform:rotate(360deg)}}</style>
+      <script>
+        // 亮色主题用户不闪深色屏
+        try { if (localStorage.getItem('movie-db-theme') === 'light') { var s = document.getElementById('splash'); s.style.background = '#fafaf9'; s.children[1].style.color = '#1c1917' } } catch (e) {}
+      </script>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
