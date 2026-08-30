@@ -1,15 +1,20 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useSyncExternalStore } from 'react'
 import {
   ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, PieChart, Pie, Cell, BarChart, LabelList,
 } from 'recharts'
-import { Clapperboard, Film, MapPin, Wallet, Ticket } from 'lucide-react'
+import { Clapperboard, Film, MapPin, Wallet, Ticket, ImageDown, Loader2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { MovieRecord } from '@/types/movie'
 import { brandColor, formatPrice } from '@/types/movie'
 import { overallStats, spendByCurrency, byYear, byFormat, topCinemas, byMonth, topRewatched, dayCounts, yoyCompare } from '@/lib/stats'
 import { chartPalette, useTheme } from '@/hooks/useTheme'
+import { getPosterCache, subscribePosters } from '@/lib/tmdb'
+import { renderReviewCard } from '@/lib/reviewCard'
+import { toast } from 'sonner'
 
 export default function StatsOverview({ records }: { records: MovieRecord[] }) {
   const [year, setYear] = useState('all')
@@ -44,6 +49,29 @@ export default function StatsOverview({ records }: { records: MovieRecord[] }) {
   const rewatched = useMemo(() => topRewatched(filtered), [filtered])
   const heat = useMemo(() => (isAll ? null : dayCounts(records, Number(year))), [records, year, isAll])
   const yoy = useMemo(() => (isAll ? null : yoyCompare(records, Number(year))), [records, year, isAll])
+
+  // 年度报告分享图
+  const posters = useSyncExternalStore(subscribePosters, getPosterCache)
+  const [reviewOpen, setReviewOpen] = useState(false)
+  const [reviewUrl, setReviewUrl] = useState('')
+  const [reviewYear, setReviewYear] = useState(0)
+  const [generating, setGenerating] = useState(false)
+
+  const genReview = async () => {
+    const y = isAll ? Math.max(...records.map(r => r.year)) : Number(year)
+    setReviewYear(y)
+    setReviewOpen(true)
+    setReviewUrl('')
+    setGenerating(true)
+    try {
+      setReviewUrl(await renderReviewCard(records, y, posters))
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '生成失败')
+      setReviewOpen(false)
+    } finally {
+      setGenerating(false)
+    }
+  }
   const hasForeign = spending.some(c => c.currency !== 'CNY')
 
   const trendData = isAll ? yearly : monthly
@@ -83,15 +111,23 @@ export default function StatsOverview({ records }: { records: MovieRecord[] }) {
         <h2 className="text-sm font-medium text-muted-foreground">
           {isAll ? '全部年份的观影统计' : `${year} 年的观影统计`}
         </h2>
-        <Select value={year} onValueChange={setYear}>
-          <SelectTrigger className="w-32 border-input bg-card text-foreground">
-            <SelectValue placeholder="年份" />
-          </SelectTrigger>
-          <SelectContent className="border-input bg-popover text-popover-foreground">
-            <SelectItem value="all">全部年份</SelectItem>
-            {years.map(y => <SelectItem key={y} value={String(y)}>{y} 年</SelectItem>)}
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm"
+            className="border-input bg-card text-muted-foreground hover:bg-accent hover:text-foreground"
+            disabled={records.length === 0}
+            onClick={genReview}>
+            <ImageDown className="mr-1.5 h-3.5 w-3.5" />年度报告
+          </Button>
+          <Select value={year} onValueChange={setYear}>
+            <SelectTrigger className="w-32 border-input bg-card text-foreground">
+              <SelectValue placeholder="年份" />
+            </SelectTrigger>
+            <SelectContent className="border-input bg-popover text-popover-foreground">
+              <SelectItem value="all">全部年份</SelectItem>
+              {years.map(y => <SelectItem key={y} value={String(y)}>{y} 年</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
@@ -277,6 +313,37 @@ export default function StatsOverview({ records }: { records: MovieRecord[] }) {
           </CardContent>
         </Card>
       )}
+      {/* 年度报告预览 */}
+      <Dialog open={reviewOpen} onOpenChange={setReviewOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto border-border bg-background text-foreground sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{reviewYear} 观影报告</DialogTitle>
+          </DialogHeader>
+          <div className="flex items-center justify-center rounded-lg border border-border bg-muted/40 p-3">
+            {reviewUrl ? (
+              <img src={reviewUrl} alt={`${reviewYear} 观影报告`} className="max-h-[60vh] w-auto rounded-md" />
+            ) : (
+              <div className="flex h-40 items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin text-amber-500 dark:text-amber-400" />
+                {generating ? '正在生成…' : ''}
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" className="border-input bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground"
+              onClick={() => setReviewOpen(false)}>关闭</Button>
+            <Button className="bg-amber-500 text-stone-950 hover:bg-amber-400" disabled={!reviewUrl}
+              onClick={() => {
+                const a = document.createElement('a')
+                a.href = reviewUrl
+                a.download = `${reviewYear}观影报告.png`
+                a.click()
+              }}>
+              <ImageDown className="mr-1.5 h-4 w-4" />下载 PNG
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
