@@ -137,9 +137,10 @@ export default function RecordsTable({ records, onEdit, onDelete, onDeleteMany, 
         <div className="relative min-w-52 flex-1">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
+            id="records-search"
             value={q}
             onChange={e => { setQ(e.target.value); setPage(1) }}
-            placeholder="搜索片名 / 影院 / 备注…"
+            placeholder="搜索片名 / 影院 / 备注…（快捷键 /）"
             className="border-input bg-card pl-9 text-foreground placeholder:text-muted-foreground/60"
           />
         </div>

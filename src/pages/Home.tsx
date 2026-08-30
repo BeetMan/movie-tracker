@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from 'react'
+import { useRef, useState, useCallback, useEffect } from 'react'
 import { Clapperboard, Download, FileSpreadsheet, Info, Moon, Plus, RotateCcw, Settings, Sun, Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -25,6 +25,7 @@ export default function Home() {
   const [resetOpen, setResetOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [pendingDup, setPendingDup] = useState<{ draft: MovieDraft; existing: MovieRecord } | null>(null)
+  const [tab, setTab] = useState('overview')
   const { theme, toggle } = useTheme()
   const [bannerDismissed, setBannerDismissed] = useState(false)
   const [lastExport, setLastExport] = useState<number>(() => Number(localStorage.getItem(LAST_EXPORT_KEY)) || 0)
@@ -79,6 +80,27 @@ export default function Home() {
     toast.success(`已将 ${ids.length} 条记录的地区改为「${region}」`)
   }
 
+  // 快捷键：N 记一笔，/ 聚焦搜索（输入框聚焦时或有弹窗时不生效）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement
+      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      if (formOpen || settingsOpen || deleting || resetOpen || pendingDup) return
+      if (e.key === 'n' || e.key === 'N') {
+        e.preventDefault()
+        setEditing(null)
+        setFormOpen(true)
+      } else if (e.key === '/') {
+        e.preventDefault()
+        setTab('records')
+        requestAnimationFrame(() => document.getElementById('records-search')?.focus())
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [formOpen, settingsOpen, deleting, resetOpen, pendingDup])
+
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -115,7 +137,7 @@ export default function Home() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button className="bg-amber-500 text-stone-950 hover:bg-amber-400" onClick={() => { setEditing(null); setFormOpen(true) }}>
+            <Button className="bg-amber-500 text-stone-950 hover:bg-amber-400" title="快捷键 N" onClick={() => { setEditing(null); setFormOpen(true) }}>
               <Plus className="mr-1.5 h-4 w-4" />记一笔
             </Button>
             <Button variant="outline" className={btnCls} onClick={handleExportJson}>
@@ -157,7 +179,7 @@ export default function Home() {
           </div>
         )}
 
-        <Tabs defaultValue="overview">
+        <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="mb-4 border border-border bg-card">
             <TabsTrigger value="overview" className="data-[state=active]:bg-amber-500 data-[state=active]:text-stone-950">统计概览</TabsTrigger>
             <TabsTrigger value="records" className="data-[state=active]:bg-amber-500 data-[state=active]:text-stone-950">全部记录</TabsTrigger>

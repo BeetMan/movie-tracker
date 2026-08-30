@@ -107,7 +107,19 @@ export default function MovieFormDialog({ open, onOpenChange, initial, onSubmit,
         region: result.cinema ? suggestRegion(result.cinema) : f.region,
       }))
       if (result.price !== null && result.price !== undefined) setPriceText(String(result.price))
-      toast.success(mode === 'local' ? '本地 OCR 完成，请仔细核对各字段' : '识别完成，请核对后保存')
+      const filled: string[] = []
+      if (result.title) filled.push('片名')
+      if (result.date) filled.push('日期')
+      if (result.cinema) filled.push('影院')
+      if (result.hall) filled.push('影厅')
+      if (result.seat) filled.push('座位')
+      if (result.price !== null && result.price !== undefined) filled.push('票价')
+      if (result.special) filled.push('特效厅')
+      if (result.note) filled.push('备注')
+      toast.success(
+        `${mode === 'local' ? '本地 OCR 完成' : '识别完成'}：已填 ${filled.join('、') || '（无）'}，请核对后保存`,
+        { duration: 5000 }
+      )
     } catch (e) {
       const msg = e instanceof Error ? e.message : '识别失败'
       if (msg === 'NO_API_KEY') {
@@ -133,7 +145,7 @@ export default function MovieFormDialog({ open, onOpenChange, initial, onSubmit,
     }
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = (keepOpen = false) => {
     const price = priceText.trim() === '' ? null : Number(priceText)
     onSubmit({
       ...form,
@@ -144,7 +156,14 @@ export default function MovieFormDialog({ open, onOpenChange, initial, onSubmit,
       note: form.note?.trim() || null,
       special: form.special?.trim() || null,
     })
-    onOpenChange(false)
+    if (keepOpen && !initial) {
+      // 连续录入：保留对话框，重置为下一张票的空白表单（日期仍默认今天）
+      setForm({ ...empty, date: fmtDate(new Date()) })
+      setPriceText('')
+      setPreview(null)
+    } else {
+      onOpenChange(false)
+    }
   }
 
   const field = (label: string, node: React.ReactNode, span = false) => (
@@ -281,7 +300,13 @@ export default function MovieFormDialog({ open, onOpenChange, initial, onSubmit,
         </div>
         <DialogFooter>
           <Button variant="outline" className="border-input bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground" onClick={() => onOpenChange(false)}>取消</Button>
-          <Button className="bg-amber-500 text-stone-950 hover:bg-amber-400" disabled={!valid || extracting} onClick={handleSubmit}>
+          {!initial && (
+            <Button variant="outline" className="border-amber-500/50 bg-transparent text-amber-600 hover:bg-amber-400/10 hover:text-amber-500 dark:text-amber-400"
+              disabled={!valid || extracting} onClick={() => handleSubmit(true)} title="保存本条并立即开始录下一张">
+              保存并继续下一张
+            </Button>
+          )}
+          <Button className="bg-amber-500 text-stone-950 hover:bg-amber-400" disabled={!valid || extracting} onClick={() => handleSubmit(false)}>
             {initial ? '保存修改' : '添加记录'}
           </Button>
         </DialogFooter>
