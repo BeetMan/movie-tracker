@@ -27,7 +27,7 @@ export function normalizeDate(s: string): string {
 
 /** 合并导入去重的基础键：片名+日期+影院（空白与全角空格归一，日期补零） */
 export function dedupBase(r: { title: string; date: string; cinema: string }): string {
-  const norm = (s: string | null | undefined) => (s ?? '').trim().replace(/[\s　]+/g, ' ')
+  const norm = (s: string | null | undefined) => (s ?? '').trim().replace(/[\s\u3000]+/g, ' ')
   return [norm(r.title), normalizeDate(r.date), norm(r.cinema)].join('|')
 }
 
