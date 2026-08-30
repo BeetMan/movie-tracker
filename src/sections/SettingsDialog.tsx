@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import { API_KEY_STORAGE, MODEL_STORAGE, DEFAULT_MODEL, SUGGESTED_MODELS } from '@/lib/vision'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { PROVIDERS, PROVIDER_STORAGE } from '@/lib/vision'
 import { OCR_MODE_STORAGE, type OcrMode } from '@/lib/ocr'
 import { TMDB_KEY_STORAGE } from '@/lib/tmdb'
 import { toast } from 'sonner'
@@ -16,8 +17,9 @@ interface Props {
 
 export default function SettingsDialog({ open, onOpenChange }: Props) {
   const [mode, setMode] = useState<OcrMode>('ai')
-  const [key, setKey] = useState('')
-  const [model, setModel] = useState(DEFAULT_MODEL)
+  const [providerId, setProviderId] = useState(PROVIDERS[0].id)
+  /** 各服务方的 Key / 模型独立保存，切换不互相覆盖 */
+  const [creds, setCreds] = useState<Record<string, { key: string; model: string }>>({})
   const [tmdbKey, setTmdbKey] = useState('')
 
   // 对话框每次打开时在渲染期间重新加载设置（React 推荐的 adjust-state-during-render 模式，避免在 effect 中同步 setState）
@@ -26,16 +28,31 @@ export default function SettingsDialog({ open, onOpenChange }: Props) {
     setPrevOpen(open)
     if (open) {
       setMode((localStorage.getItem(OCR_MODE_STORAGE) as OcrMode) || 'ai')
-      setKey(localStorage.getItem(API_KEY_STORAGE) ?? '')
-      setModel(localStorage.getItem(MODEL_STORAGE) || DEFAULT_MODEL)
+      setProviderId(localStorage.getItem(PROVIDER_STORAGE) || PROVIDERS[0].id)
+      setCreds(Object.fromEntries(
+        PROVIDERS.map(p => [p.id, {
+          key: localStorage.getItem(p.keyStorage) ?? '',
+          model: localStorage.getItem(p.modelStorage) || p.defaultModel,
+        }])
+      ))
       setTmdbKey(localStorage.getItem(TMDB_KEY_STORAGE) ?? '')
     }
   }
 
+  const provider = PROVIDERS.find(p => p.id === providerId) ?? PROVIDERS[0]
+  const cred = creds[provider.id] ?? { key: '', model: provider.defaultModel }
+  const setCred = (patch: Partial<{ key: string; model: string }>) =>
+    setCreds(prev => ({ ...prev, [provider.id]: { ...cred, ...patch } }))
+
   const save = () => {
     localStorage.setItem(OCR_MODE_STORAGE, mode)
-    localStorage.setItem(API_KEY_STORAGE, key.trim())
-    localStorage.setItem(MODEL_STORAGE, model.trim() || DEFAULT_MODEL)
+    localStorage.setItem(PROVIDER_STORAGE, providerId)
+    for (const p of PROVIDERS) {
+      const c = creds[p.id]
+      if (!c) continue
+      localStorage.setItem(p.keyStorage, c.key.trim())
+      localStorage.setItem(p.modelStorage, c.model.trim() || p.defaultModel)
+    }
     localStorage.setItem(TMDB_KEY_STORAGE, tmdbKey.trim())
     toast.success('设置已保存')
     onOpenChange(false)
@@ -58,7 +75,7 @@ export default function SettingsDialog({ open, onOpenChange }: Props) {
                 <span>
                   <span className="block text-sm text-foreground">AI 识别（推荐）</span>
                   <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
-                    调用 Kimi 视觉大模型，准确率高、字段全，需要 Moonshot API Key（按量计费，单次约几分钱）
+                    调用视觉大模型，准确率高、字段全，需要 API Key（按量计费，单次约几分钱）
                   </span>
                 </span>
               </label>
@@ -77,32 +94,43 @@ export default function SettingsDialog({ open, onOpenChange }: Props) {
           {mode === 'ai' && (
             <>
               <div>
-                <Label className="mb-1.5 block text-xs text-muted-foreground">Moonshot API Key</Label>
+                <Label className="mb-1.5 block text-xs text-muted-foreground">服务方</Label>
+                <Select value={providerId} onValueChange={setProviderId}>
+                  <SelectTrigger className={inputCls}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="border-input bg-popover text-popover-foreground">
+                    {PROVIDERS.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="mb-1.5 block text-xs text-muted-foreground">{provider.name} API Key</Label>
                 <Input
                   type="password"
                   className={inputCls}
-                  value={key}
-                  onChange={e => setKey(e.target.value)}
+                  value={cred.key}
+                  onChange={e => setCred({ key: e.target.value })}
                   placeholder="sk-..."
                 />
                 <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                  在 platform.moonshot.cn 创建。Key 只保存在你的浏览器里，识别请求由浏览器直接发往 Moonshot，不经过任何中间服务器。
+                  在 {provider.consoleUrl} 创建。Key 只保存在你的浏览器里，识别请求由浏览器直接发往 {provider.name}，不经过任何中间服务器。
                 </p>
               </div>
               <div>
                 <Label className="mb-1.5 block text-xs text-muted-foreground">模型（需支持视觉）</Label>
                 <Input
                   className={inputCls}
-                  value={model}
-                  onChange={e => setModel(e.target.value)}
-                  placeholder={DEFAULT_MODEL}
+                  value={cred.model}
+                  onChange={e => setCred({ model: e.target.value })}
+                  placeholder={provider.defaultModel}
                   list="model-options"
                 />
                 <datalist id="model-options">
-                  {SUGGESTED_MODELS.map(m => <option key={m} value={m} />)}
+                  {provider.models.map(m => <option key={m} value={m} />)}
                 </datalist>
                 <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                  默认 {DEFAULT_MODEL}。若提示模型不存在 / 无权限（404），从这里换一个可用的视觉模型。
+                  默认 {provider.defaultModel}。若提示模型不存在 / 无权限（404），从这里换一个可用的视觉模型。
                 </p>
               </div>
             </>

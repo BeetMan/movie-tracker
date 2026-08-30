@@ -1,24 +1,64 @@
 import type { MovieDraft } from '@/types/movie'
 import { CURRENCIES, FORMAT_OPTIONS, SPECIAL_HALL_OPTIONS } from '@/types/movie'
 
-export const API_KEY_STORAGE = 'movie-db-apikey'
-export const MODEL_STORAGE = 'movie-db-model'
-// kimi-latest 已下线（404），默认用长期可用的视觉预览模型
-export const DEFAULT_MODEL = 'moonshot-v1-128k-vision-preview'
-/** 设置页模型输入框的联想选项（需支持视觉） */
-export const SUGGESTED_MODELS = [
-  'moonshot-v1-128k-vision-preview',
-  'moonshot-v1-32k-vision-preview',
-  'moonshot-v1-8k-vision-preview',
-  'kimi-thinking-preview',
-]
-
-export function getApiKey(): string {
-  return localStorage.getItem(API_KEY_STORAGE) ?? ''
+export interface VisionProvider {
+  id: string
+  name: string
+  /** OpenAI 兼容接口的 base（不含 /chat/completions） */
+  baseUrl: string
+  /** 控制台地址（设置页提示用） */
+  consoleUrl: string
+  keyStorage: string
+  modelStorage: string
+  defaultModel: string
+  /** 设置页模型联想（需支持视觉） */
+  models: string[]
 }
 
-export function getModel(): string {
-  return localStorage.getItem(MODEL_STORAGE) || DEFAULT_MODEL
+export const PROVIDER_STORAGE = 'movie-db-vision-provider'
+
+export const PROVIDERS: VisionProvider[] = [
+  {
+    id: 'moonshot',
+    name: 'Moonshot（Kimi）',
+    baseUrl: 'https://api.moonshot.cn/v1',
+    consoleUrl: 'platform.moonshot.cn',
+    keyStorage: 'movie-db-apikey',   // 沿用旧 Key，老用户无感迁移
+    modelStorage: 'movie-db-model',
+    // kimi-latest 已下线（404），默认用长期可用的视觉预览模型
+    defaultModel: 'moonshot-v1-128k-vision-preview',
+    models: [
+      'moonshot-v1-128k-vision-preview',
+      'moonshot-v1-32k-vision-preview',
+      'moonshot-v1-8k-vision-preview',
+      'kimi-k3',
+      'kimi-k2.7-code',
+      'kimi-thinking-preview',
+    ],
+  },
+  {
+    id: 'deepseek',
+    name: 'DeepSeek',
+    baseUrl: 'https://api.deepseek.com/v1',
+    consoleUrl: 'platform.deepseek.com',
+    keyStorage: 'movie-db-deepseek-key',
+    modelStorage: 'movie-db-deepseek-model',
+    defaultModel: 'deepseek-v4-flash-vision-exp',
+    models: ['deepseek-v4-flash-vision-exp'],
+  },
+]
+
+export function getProvider(): VisionProvider {
+  const id = localStorage.getItem(PROVIDER_STORAGE)
+  return PROVIDERS.find(p => p.id === id) ?? PROVIDERS[0]
+}
+
+export function getApiKey(p: VisionProvider = getProvider()): string {
+  return localStorage.getItem(p.keyStorage) ?? ''
+}
+
+export function getModel(p: VisionProvider = getProvider()): string {
+  return localStorage.getItem(p.modelStorage) || p.defaultModel
 }
 
 /** 读取图片文件并压缩为 JPEG dataURL（最长边 1600px） */
@@ -64,18 +104,47 @@ const PROMPT = `这是一张电影取票/购票页面的截图（可能来自淘
 
 /** 调用 Kimi 视觉模型，从截图提取观影信息 */
 export async function extractFromImage(dataUrl: string): Promise<Partial<MovieDraft>> {
-  const apiKey = getApiKey()
+  const provider = getProvider()
+  const apiKey = getApiKey(provider)
   if (!apiKey) throw new Error('NO_API_KEY')
 
-  const res = await fetch('https://api.moonshot.cn/v1/chat/completions', {
+  // 部分新模型（K2.7 Code / K3 / thinking 系）锁死 temperature=1，
+  // 先用 0.1 请求，若服务端明确报 temperature 不支持则自动用 1 重试
+  let res = await send(provider, apiKey, dataUrl, 0.1)
+  if (res.status === 400) {
+    const text = await res.clone().text().catch(() => '')
+    if (/temperature/i.test(text)) res = await send(provider, apiKey, dataUrl, 1)
+    else return throwHttpError(res.status, text)
+  }
+
+  if (res.status === 401) throw new Error(`${provider.name} API Key 无效，请检查设置`)
+  if (res.status === 404) {
+    throw new Error(`模型「${getModel(provider)}」不存在或当前 Key 无权限，请到设置中更换模型（如 ${provider.defaultModel}）`, { cause: 'MODEL_NOT_FOUND' })
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`识别请求失败（${res.status}）${text.slice(0, 120)}`)
+  }
+
+  const data = await res.json()
+  const content: string = data?.choices?.[0]?.message?.content ?? ''
+  return parseExtraction(content)
+}
+
+function throwHttpError(status: number, text: string): never {
+  throw new Error(`识别请求失败（${status}）${text.slice(0, 120)}`)
+}
+
+function send(provider: VisionProvider, apiKey: string, dataUrl: string, temperature: number) {
+  return fetch(`${provider.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: getModel(),
-      temperature: 0.1,
+      model: getModel(provider),
+      temperature,
       messages: [
         {
           role: 'user',
@@ -87,19 +156,6 @@ export async function extractFromImage(dataUrl: string): Promise<Partial<MovieDr
       ],
     }),
   })
-
-  if (res.status === 401) throw new Error('API Key 无效，请检查设置')
-  if (res.status === 404) {
-    throw new Error(`模型「${getModel()}」不存在或当前 Key 无权限，请到设置中更换模型（如 ${DEFAULT_MODEL}）`, { cause: 'MODEL_NOT_FOUND' })
-  }
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`识别请求失败（${res.status}）${text.slice(0, 120)}`)
-  }
-
-  const data = await res.json()
-  const content: string = data?.choices?.[0]?.message?.content ?? ''
-  return parseExtraction(content)
 }
 
 function parseExtraction(content: string): Partial<MovieDraft> {
