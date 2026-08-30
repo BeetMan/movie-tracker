@@ -1,0 +1,21 @@
+# Cloudflare Workers 部署配置（静态资产 Worker + 子路径路由）
+# 使用：cp wrangler.toml.example wrangler.toml，改成自己的域名/路径，然后：
+#   npm run build:cf && npx wrangler deploy
+name = "movie-tracker"
+compatibility_date = "2026-08-28"
+
+# 接管哪个域名下的哪个子路径（其余路径不受影响）
+routes = [
+  { pattern = "example.com/movie", zone_name = "example.com" },
+  { pattern = "example.com/movie/*", zone_name = "example.com" },
+]
+
+# 子路径前缀（不带尾斜杠），需与 routes 和构建 base 一致
+[vars]
+BASE_PATH = "/movie"
+
+[assets]
+directory = "./dist-cf"
+binding = "ASSETS"
+# SPA 回退：未知路径返回 index.html
+not_found_handling = "single-page-application"

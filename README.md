@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/BeetMan/movie-tracker/actions/workflows/ci.yml/badge.svg)](https://github.com/BeetMan/movie-tracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-1.0.0-amber)](https://github.com/BeetMan/movie-tracker/releases)
+[![Version](https://img.shields.io/badge/version-1.1.0-amber)](https://github.com/BeetMan/movie-tracker/releases)
 
 个人影院观影记录管理应用。记录每一场电影：片名、日期、影院、影厅、座位、票价（多币种）、制式（IMAX / 杜比视界 / CINITY / 中国巨幕 / 4DX 等），并生成观影统计图表。支持票根截图识别自动填表、TMDB 海报墙。
 
@@ -84,16 +84,21 @@ public/
 
 `npm run build` 产物在 `dist/`，base 为相对路径 `./`，可直接丢到任意静态托管（含子目录）。
 
-### Cloudflare（子路径 `/movie/`）
+### Cloudflare（子路径部署，例如 `your-domain.com/movie/`）
 
-本项目通过静态资产 Worker 部署在 `beetya.ng/movie/` 子路径下，`worker.js` 负责剥掉路径前缀后转交 ASSETS：
+仓库内不含任何个人域名配置，按以下步骤部署到你自己的域名：
 
 ```bash
-npm run build:cf        # 以 --base=/movie/ 构建到 dist-cf/
-npx wrangler deploy     # 部署并绑定路由（见 wrangler.toml，按需改成你的域名）
+cp wrangler.toml.example wrangler.toml   # 生成你自己的配置
+# 编辑 wrangler.toml：routes 改成你的域名和路径，zone_name 改成你的域名，
+#                     [vars] BASE_PATH 改成你的子路径（不带尾斜杠）
+
+# package.json 里 build:cf 脚本的 --base 也要改成同一路径（带首尾斜杠，如 /movie/）
+npm run build:cf
+npx wrangler deploy                      # 首次会引导 OAuth 登录
 ```
 
-部署到自己的域名：修改 `wrangler.toml` 中的 `routes` 与 `zone_name` 即可；注意 `routes` 是 TOML 顶层字段，必须写在 `[assets]` 表之前。
+原理：`worker.js` 是一个通用的子路径前缀剥离器（从 `BASE_PATH` 读取），配合静态资产 Worker 把应用挂到已有站点的子路径下，不影响域名上其他内容。注意 `routes` 是 TOML 顶层字段，必须写在 `[assets]` 表之前。
 
 ## License
 

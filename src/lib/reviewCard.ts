@@ -90,15 +90,18 @@ export async function renderReviewCard(records: MovieRecord[], year: number, pos
   ctx.fillText(`生成于 ${new Date().toISOString().slice(0, 10)}`, RIGHT, 64)
   ctx.textAlign = 'left'
 
-  // ── 四项大数字 ──
-  const tiles: { label: string; value: string }[] = [
+  // ── 四项大数字（总花费：最大币种为主，其余币种小字附注） ──
+  const tiles: { label: string; value: string; sub?: string }[] = [
     { label: '观影场次', value: String(s.total) },
     { label: '不同影片', value: String(s.films) },
     { label: '打卡影院', value: String(s.cinemas) },
-    {
-      label: '总花费',
-      value: spending.length ? spending.map(c => formatPrice(c.spend, c.currency)).join(' ') : '—',
-    },
+    spending.length
+      ? {
+          label: '总花费',
+          value: formatPrice(spending[0].spend, spending[0].currency),
+          sub: spending.length > 1 ? `另有 ${spending.slice(1).map(c => formatPrice(c.spend, c.currency)).join(' · ')}` : undefined,
+        }
+      : { label: '总花费', value: '—' },
   ]
   const colW = (RIGHT - MARGIN) / tiles.length
   tiles.forEach((t, i) => {
@@ -109,6 +112,11 @@ export async function renderReviewCard(records: MovieRecord[], year: number, pos
     ctx.font = `400 17px ${FONT}`
     ctx.fillStyle = MUTED
     ctx.fillText(t.label, x, 280)
+    if (t.sub) {
+      ctx.font = `400 15px ${FONT}`
+      ctx.fillStyle = MUTED
+      ctx.fillText(ellipsis(ctx, t.sub, colW - 16), x, 304)
+    }
   })
 
   // ── 同比 ──
