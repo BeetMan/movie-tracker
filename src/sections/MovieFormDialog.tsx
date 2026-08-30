@@ -9,7 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
 import type { MovieRecord, MovieDraft } from '@/types/movie'
-import { CURRENCIES, CURRENCY_NAMES, FORMAT_OPTIONS, SPECIAL_HALL_OPTIONS } from '@/types/movie'
+import { CURRENCIES, CURRENCY_NAMES, FORMAT_OPTIONS, SPECIAL_HALL_OPTIONS, normalizeDate } from '@/types/movie'
 import { extractFromImage, fileToDataUrl } from '@/lib/vision'
 import { getOcrMode, ocrExtract } from '@/lib/ocr'
 
@@ -38,16 +38,6 @@ const empty: MovieDraft = {
 function fmtDate(d: Date): string {
   const p = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())}`
-}
-
-/** 把 YYYY.M.D 归一化成 YYYY.MM.DD（补零）；含 ? 或无法解析的原样返回 */
-function normalizeDate(s: string): string {
-  const t = s.trim()
-  const full = /^(\d{4})\.(\d{1,2})\.(\d{1,2})$/.exec(t)
-  if (full) return `${full[1]}.${full[2].padStart(2, '0')}.${full[3].padStart(2, '0')}`
-  const unknownDay = /^(\d{4})\.(\d{1,2})\.(\?|？)$/.exec(t)
-  if (unknownDay) return `${unknownDay[1]}.${unknownDay[2].padStart(2, '0')}.?`
-  return t
 }
 
 /** 把 YYYY.M.D 解析成 Date；含 ? 或不合法返回 undefined */

@@ -15,6 +15,27 @@ export interface MovieRecord {
   year: number
 }
 
+/** 把 YYYY.M.D 归一化成 YYYY.MM.DD（补零）；含 ? 或无法解析的原样返回 */
+export function normalizeDate(s: string): string {
+  const t = (s ?? '').trim()
+  const full = /^(\d{4})\.(\d{1,2})\.(\d{1,2})$/.exec(t)
+  if (full) return `${full[1]}.${full[2].padStart(2, '0')}.${full[3].padStart(2, '0')}`
+  const unknownDay = /^(\d{4})\.(\d{1,2})\.(\?|？)$/.exec(t)
+  if (unknownDay) return `${unknownDay[1]}.${unknownDay[2].padStart(2, '0')}.?`
+  return t
+}
+
+/** 合并导入去重的基础键：片名+日期+影院（空白与全角空格归一，日期补零） */
+export function dedupBase(r: { title: string; date: string; cinema: string }): string {
+  const norm = (s: string | null | undefined) => (s ?? '').trim().replace(/[\s　]+/g, ' ')
+  return [norm(r.title), normalizeDate(r.date), norm(r.cinema)].join('|')
+}
+
+/** 座位归一化（多张票空格分隔，不参与排序比较） */
+export function normSeat(s: string | null | undefined): string {
+  return (s ?? '').trim().replace(/\s+/g, ' ')
+}
+
 /** 支持的币种与显示符号 */
 export const CURRENCIES = ['CNY', 'HKD', 'MOP', 'TWD', 'USD', 'EUR', 'JPY', 'KRW'] as const
 

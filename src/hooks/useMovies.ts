@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import baseData from '@/data/movies.json'
 import type { MovieRecord, MovieDraft } from '@/types/movie'
-import { learnRegionMap } from '@/types/movie'
+import { learnRegionMap, dedupBase, normSeat, normalizeDate } from '@/types/movie'
 
 const STORAGE_KEY = 'movie-db-v1'
 /** 最后一次导出备份的时间戳（毫秒），用于备份提醒 */
@@ -84,6 +84,34 @@ export function useMovies() {
     setRecords(prev => prev.map(r => (set.has(r.id) ? { ...r, region } : r)))
   }, [])
 
+  /**
+   * 合并导入：把文件里的记录补充进现有数据，按「片名+日期+影院+座位」去重。
+   * 座位一致或任一方座位为空（信息不全不敢放行）即视为重复；id 重新续编，地区沿用学习结果。
+   */
+  const mergeRecords = useCallback((list: MovieRecord[]) => {
+    const seen = records.map(r => ({ base: dedupBase(r), seat: normSeat(r.seat) }))
+    const regionMap = learnRegionMap(records)
+    let maxId = Math.max(0, ...records.map(r => r.id))
+    const merged = [...records]
+    let added = 0
+    let skipped = 0
+    for (const raw of list) {
+      const r = { ...raw, date: normalizeDate(raw.date ?? '') }
+      const base = dedupBase(r)
+      const seat = normSeat(r.seat)
+      if (seen.some(e => e.base === base && (e.seat === seat || e.seat === '' || seat === ''))) {
+        skipped += 1
+        continue
+      }
+      seen.push({ base, seat })
+      const region = r.region?.trim() || regionMap.get((r.cinema ?? '').trim()) || ''
+      merged.push({ ...r, id: ++maxId, region, year: r.year ?? deriveYear(r.date) })
+      added += 1
+    }
+    setRecords(merged)
+    return { added, skipped }
+  }, [records])
+
   const importRecords = useCallback((list: MovieRecord[]) => {
     const map = learnRegionMap(list)
     const cleaned = list.map((r, i) => ({
@@ -102,7 +130,7 @@ export function useMovies() {
 
   const isCustomized = useMemo(() => localStorage.getItem(STORAGE_KEY) !== null, [records])
 
-  return { records, addRecord, updateRecord, deleteRecord, restoreRecords, deleteMany, setRegionFor, importRecords, resetToBase, isCustomized, suggestRegion, baseCount: base.length }
+  return { records, addRecord, updateRecord, deleteRecord, restoreRecords, deleteMany, setRegionFor, importRecords, mergeRecords, resetToBase, isCustomized, suggestRegion, baseCount: base.length }
 }
 
 export function exportJson(records: MovieRecord[]) {

@@ -18,13 +18,14 @@ import type { MovieRecord, MovieDraft } from '@/types/movie'
 import { listRegions } from '@/types/movie'
 
 export default function Home() {
-  const { records, addRecord, updateRecord, deleteRecord, restoreRecords, deleteMany, setRegionFor, importRecords, resetToBase, isCustomized, suggestRegion, baseCount } = useMovies()
+  const { records, addRecord, updateRecord, deleteRecord, restoreRecords, deleteMany, setRegionFor, importRecords, mergeRecords, resetToBase, isCustomized, suggestRegion, baseCount } = useMovies()
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<MovieRecord | null>(null)
   const [deleting, setDeleting] = useState<MovieRecord | null>(null)
   const [resetOpen, setResetOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [pendingDup, setPendingDup] = useState<{ draft: MovieDraft; existing: MovieRecord } | null>(null)
+  const [importList, setImportList] = useState<MovieRecord[] | null>(null)
   const [tab, setTab] = useState('overview')
   const { theme, toggle } = useTheme()
   const [bannerDismissed, setBannerDismissed] = useState(false)
@@ -109,14 +110,31 @@ export default function Home() {
       try {
         const data = JSON.parse(String(reader.result))
         if (!Array.isArray(data) || data.some(r => typeof r.title !== 'string')) throw new Error()
-        importRecords(data as MovieRecord[])
-        toast.success(`已导入 ${data.length} 条记录`)
+        setImportList(data as MovieRecord[])
       } catch {
         toast.error('导入失败：请使用本站导出的 JSON 文件')
       }
     }
     reader.readAsText(file)
     e.target.value = ''
+  }
+
+  const doMergeImport = () => {
+    if (!importList) return
+    const { added, skipped } = mergeRecords(importList)
+    toast.success(
+      added > 0
+        ? `合并完成：新增 ${added} 条${skipped > 0 ? `，跳过重复 ${skipped} 条` : ''}`
+        : `没有新记录，${skipped} 条全部重复`
+    )
+    setImportList(null)
+  }
+
+  const doReplaceImport = () => {
+    if (!importList) return
+    importRecords(importList)
+    toast.success(`已整体替换为文件中的 ${importList.length} 条记录`)
+    setImportList(null)
   }
 
   const btnCls = 'border-input bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground'
@@ -287,6 +305,30 @@ export default function Home() {
               }}>
               仍要添加
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!importList} onOpenChange={v => !v && setImportList(null)}>
+        <AlertDialogContent className="border-border bg-background text-foreground">
+          <AlertDialogHeader>
+            <AlertDialogTitle>如何导入这 {importList?.length ?? 0} 条记录？</AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground">
+              当前已有 {records.length} 条记录。<br />
+              <strong className="text-foreground">合并</strong>：保留现有记录，重复的（片名+日期+影院+座位相同）自动跳过，适合汇总多处录入的数据。<br />
+              <strong className="text-foreground">替换</strong>：清空现有数据，仅保留文件内容，恢复备份时用这个。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="sm:justify-between">
+            <AlertDialogCancel className={btnCls}>取消</AlertDialogCancel>
+            <div className="flex gap-2">
+              <AlertDialogAction className="bg-amber-500 text-stone-950 hover:bg-amber-400" onClick={doMergeImport}>
+                合并到现有数据
+              </AlertDialogAction>
+              <AlertDialogAction className="bg-rose-600 text-white hover:bg-rose-500" onClick={doReplaceImport}>
+                整体替换
+              </AlertDialogAction>
+            </div>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
