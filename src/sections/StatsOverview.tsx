@@ -13,7 +13,7 @@ import { brandColor, formatPrice } from '@/types/movie'
 import { overallStats, spendByCurrency, byYear, byFormat, topCinemas, byMonth, topRewatched, dayCounts, yoyCompare } from '@/lib/stats'
 import { chartPalette, useTheme } from '@/hooks/useTheme'
 import { getPosterCache, subscribePosters } from '@/lib/tmdb'
-import { renderReviewCard } from '@/lib/reviewCard'
+import { downloadFile } from '@/lib/download'
 import { toast } from 'sonner'
 
 export default function StatsOverview({ records }: { records: MovieRecord[] }) {
@@ -64,6 +64,7 @@ export default function StatsOverview({ records }: { records: MovieRecord[] }) {
     setReviewUrl('')
     setGenerating(true)
     try {
+      const { renderReviewCard } = await import('@/lib/reviewCard')
       setReviewUrl(await renderReviewCard(records, y, posters))
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '生成失败')
@@ -333,12 +334,7 @@ export default function StatsOverview({ records }: { records: MovieRecord[] }) {
             <Button variant="outline" className="border-input bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground"
               onClick={() => setReviewOpen(false)}>关闭</Button>
             <Button className="bg-amber-500 text-stone-950 hover:bg-amber-400" disabled={!reviewUrl}
-              onClick={() => {
-                const a = document.createElement('a')
-                a.href = reviewUrl
-                a.download = `${reviewYear}观影报告.png`
-                a.click()
-              }}>
+              onClick={() => downloadFile(reviewUrl, `${reviewYear}观影报告.png`)}>
               <ImageDown className="mr-1.5 h-4 w-4" />下载 PNG
             </Button>
           </div>

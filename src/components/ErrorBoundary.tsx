@@ -1,6 +1,8 @@
 import { Component, type ReactNode } from 'react'
 import { TriangleAlert, RefreshCw, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { STORAGE_KEY } from '@/hooks/useMovies'
+import { downloadFile, todayStamp } from '@/lib/download'
 
 interface Props {
   children: ReactNode
@@ -26,15 +28,9 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   private exportData = () => {
-    const raw = localStorage.getItem('movie-db-v1')
+    const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return
-    const blob = new Blob([raw], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `观影数据库_紧急备份_${new Date().toISOString().slice(0, 10)}.json`
-    a.click()
-    URL.revokeObjectURL(url)
+    downloadFile(new Blob([raw], { type: 'application/json' }), `观影数据库_紧急备份_${todayStamp()}.json`)
   }
 
   render() {
@@ -42,7 +38,7 @@ export default class ErrorBoundary extends Component<Props, State> {
     if (!error) return this.props.children
 
     const hasData = (() => {
-      try { return !!localStorage.getItem('movie-db-v1') } catch { return false }
+      try { return !!localStorage.getItem(STORAGE_KEY) } catch { return false }
     })()
 
     return (

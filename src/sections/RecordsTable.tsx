@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import type { MovieRecord } from '@/types/movie'
 import { formatCategory, brandColor, formatPrice } from '@/types/movie'
 import { findPoster, getPosterCache, posterUrl, subscribePosters } from '@/lib/tmdb'
-import { renderTicketCard } from '@/lib/ticketCard'
+import { downloadFile } from '@/lib/download'
 
 const PAGE_SIZE = 15
 
@@ -48,6 +48,7 @@ export default function RecordsTable({ records, onEdit, onDelete, onDeleteMany, 
     setShare({ record: r, dataUrl: '' })
     try {
       const match = findPoster(posters, r.title, r.year)
+      const { renderTicketCard } = await import('@/lib/ticketCard')
       const dataUrl = await renderTicketCard(r, match?.poster)
       setShare({ record: r, dataUrl })
     } catch {
@@ -57,10 +58,7 @@ export default function RecordsTable({ records, onEdit, onDelete, onDeleteMany, 
 
   const downloadShare = () => {
     if (!share?.dataUrl) return
-    const a = document.createElement('a')
-    a.href = share.dataUrl
-    a.download = `票根_${share.record.title}_${share.record.date}.png`
-    a.click()
+    downloadFile(share.dataUrl, `票根_${share.record.title}_${share.record.date}.png`)
   }
 
   const years = useMemo(() => [...new Set(records.map(r => r.year))].sort((a, b) => b - a), [records])

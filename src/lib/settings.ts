@@ -7,7 +7,7 @@ import { PROVIDERS, PROVIDER_STORAGE } from '@/lib/vision'
 import { OCR_MODE_STORAGE } from '@/lib/ocr'
 import { TMDB_KEY_STORAGE, POSTER_CACHE_STORAGE, savePosterCache, type PosterCache } from '@/lib/tmdb'
 import { THEME_STORAGE } from '@/hooks/useTheme'
-import { LAST_EXPORT_KEY } from '@/hooks/useMovies'
+import { downloadFile, todayStamp } from '@/lib/download'
 
 const SETTINGS_TYPE = 'movie-db-settings'
 
@@ -34,13 +34,7 @@ export function exportSettings() {
     data,
   }
   const blob = new Blob([JSON.stringify(payload, null, 1)], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `观影数据库_设置_${new Date().toISOString().slice(0, 10)}.json`
-  a.click()
-  URL.revokeObjectURL(url)
-  localStorage.setItem(LAST_EXPORT_KEY, String(Date.now()))
+  downloadFile(blob, `观影数据库_设置_${todayStamp()}.json`)
 }
 
 /** 导入设置备份，返回写入的设置项数量；格式不合法时抛错 */

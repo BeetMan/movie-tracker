@@ -1,5 +1,5 @@
-import { useRef, useState, useCallback, useEffect } from 'react'
-import { Clapperboard, Download, FileSpreadsheet, Info, Moon, Plus, RotateCcw, Settings, Sun, Upload, X } from 'lucide-react'
+import { lazy, Suspense, useRef, useState, useCallback, useEffect } from 'react'
+import { Clapperboard, Loader2, Download, FileSpreadsheet, Info, Moon, Plus, RotateCcw, Settings, Sun, Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -9,13 +9,24 @@ import {
 import { Toaster, toast } from 'sonner'
 import { useMovies, exportJson, exportCsv, LAST_EXPORT_KEY } from '@/hooks/useMovies'
 import { useTheme } from '@/hooks/useTheme'
-import StatsOverview from '@/sections/StatsOverview'
-import RecordsTable from '@/sections/RecordsTable'
-import PosterWall from '@/sections/PosterWall'
-import MovieFormDialog from '@/sections/MovieFormDialog'
-import SettingsDialog from '@/sections/SettingsDialog'
+
+// 各区块按需加载：图表（recharts）、日历、识别等重依赖不进首屏主包
+const StatsOverview = lazy(() => import('@/sections/StatsOverview'))
+const RecordsTable = lazy(() => import('@/sections/RecordsTable'))
+const PosterWall = lazy(() => import('@/sections/PosterWall'))
+const MovieFormDialog = lazy(() => import('@/sections/MovieFormDialog'))
+const SettingsDialog = lazy(() => import('@/sections/SettingsDialog'))
+
+function SectionFallback() {
+  return (
+    <div className="flex h-64 items-center justify-center">
+      <Loader2 className="h-5 w-5 animate-spin text-amber-500 dark:text-amber-400" />
+    </div>
+  )
+}
 import type { MovieRecord, MovieDraft } from '@/types/movie'
-import { listRegions } from '@/types/movie'
+import { listRegions, normalizeDate } from '@/types/movie'
+import { sanitizeRecords } from '@/lib/records'
 import { version } from '../../package.json'
 
 export default function Home() {
@@ -25,8 +36,12 @@ export default function Home() {
   const [deleting, setDeleting] = useState<MovieRecord | null>(null)
   const [resetOpen, setResetOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [pendingDup, setPendingDup] = useState<{ draft: MovieDraft; existing: MovieRecord } | null>(null)
   const [importList, setImportList] = useState<MovieRecord[] | null>(null)
+  // 弹窗首次打开时才挂载（触发懒加载），之后保持挂载以保留关闭动画
+  const [formMounted, setFormMounted] = useState(false)
+  const [settingsMounted, setSettingsMounted] = useState(false)
+  if (formOpen && !formMounted) setFormMounted(true)
+  if (settingsOpen && !settingsMounted) setSettingsMounted(true)
   const [tab, setTab] = useState('overview')
   const { theme, toggle } = useTheme()
   const [bannerDismissed, setBannerDismissed] = useState(false)
@@ -53,17 +68,15 @@ export default function Home() {
     return [...count.entries()].sort((a, b) => b[1] - a[1]).map(([name]) => name)
   }, [records])
 
+  // 重复检测：同片名 + 同日期，可能是误录（也可能是同天二刷，由用户在表单里确认）
+  const findDuplicate = (draft: MovieDraft) =>
+    records.find(r => r.title.trim() === draft.title && normalizeDate(r.date) === draft.date)
+
   const handleSubmit = (draft: MovieDraft) => {
     if (editing) {
       updateRecord(editing.id, draft)
       toast.success(`已更新《${draft.title}》`)
     } else {
-      // 重复检测：同片名 + 同日期，可能是误录（也可能是同场二刷，由用户确认）
-      const dup = records.find(r => r.title.trim() === draft.title.trim() && r.date === draft.date)
-      if (dup) {
-        setPendingDup({ draft, existing: dup })
-        return
-      }
       addRecord(draft)
       toast.success(`已添加《${draft.title}》`)
     }
@@ -88,7 +101,7 @@ export default function Home() {
       const t = e.target as HTMLElement
       if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) return
       if (e.metaKey || e.ctrlKey || e.altKey) return
-      if (formOpen || settingsOpen || deleting || resetOpen || pendingDup) return
+      if (formOpen || settingsOpen || deleting || resetOpen) return
       if (e.key === 'n' || e.key === 'N') {
         e.preventDefault()
         setEditing(null)
@@ -101,7 +114,7 @@ export default function Home() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [formOpen, settingsOpen, deleting, resetOpen, pendingDup])
+  }, [formOpen, settingsOpen, deleting, resetOpen])
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -109,9 +122,10 @@ export default function Home() {
     const reader = new FileReader()
     reader.onload = () => {
       try {
-        const data = JSON.parse(String(reader.result))
-        if (!Array.isArray(data) || data.some(r => typeof r.title !== 'string')) throw new Error()
-        setImportList(data as MovieRecord[])
+        const { records: list, dropped } = sanitizeRecords(JSON.parse(String(reader.result)))
+        if (list.length === 0) throw new Error()
+        if (dropped > 0) toast.warning(`文件中有 ${dropped} 条记录缺少片名或格式不对，已忽略`)
+        setImportList(list)
       } catch {
         toast.error('导入失败：请使用本站导出的 JSON 文件')
       }
@@ -205,19 +219,25 @@ export default function Home() {
             <TabsTrigger value="posters" className="data-[state=active]:bg-amber-500 data-[state=active]:text-stone-950">海报墙</TabsTrigger>
           </TabsList>
           <TabsContent value="overview">
-            <StatsOverview records={records} />
+            <Suspense fallback={<SectionFallback />}>
+              <StatsOverview records={records} />
+            </Suspense>
           </TabsContent>
           <TabsContent value="records">
-            <RecordsTable
-              records={records}
-              onEdit={r => { setEditing(r); setFormOpen(true) }}
-              onDelete={setDeleting}
-              onDeleteMany={handleDeleteMany}
-              onSetRegion={handleSetRegion}
-            />
+            <Suspense fallback={<SectionFallback />}>
+              <RecordsTable
+                records={records}
+                onEdit={r => { setEditing(r); setFormOpen(true) }}
+                onDelete={setDeleting}
+                onDeleteMany={handleDeleteMany}
+                onSetRegion={handleSetRegion}
+              />
+            </Suspense>
           </TabsContent>
           <TabsContent value="posters">
-            <PosterWall records={records} onNeedSettings={() => setSettingsOpen(true)} />
+            <Suspense fallback={<SectionFallback />}>
+              <PosterWall records={records} onNeedSettings={() => setSettingsOpen(true)} />
+            </Suspense>
           </TabsContent>
         </Tabs>
 
@@ -227,7 +247,8 @@ export default function Home() {
         </footer>
       </div>
 
-      <MovieFormDialog
+      <Suspense fallback={null}>
+      {formMounted && <MovieFormDialog
         open={formOpen}
         onOpenChange={setFormOpen}
         initial={editing}
@@ -237,8 +258,10 @@ export default function Home() {
         regions={regionOptions}
         cinemas={cinemaOptions}
         suggestHalls={suggestHalls}
-      />
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+        findDuplicate={findDuplicate}
+      />}
+      {settingsMounted && <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />}
+      </Suspense>
 
       <AlertDialog open={!!deleting} onOpenChange={v => !v && setDeleting(null)}>
         <AlertDialogContent className="border-border bg-background text-foreground">
@@ -280,32 +303,6 @@ export default function Home() {
             <AlertDialogAction className="bg-rose-600 text-white hover:bg-rose-500"
               onClick={() => { resetToBase(); toast.success('已重置为初始数据') }}>
               重置
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={!!pendingDup} onOpenChange={v => !v && setPendingDup(null)}>
-        <AlertDialogContent className="border-border bg-background text-foreground">
-          <AlertDialogHeader>
-            <AlertDialogTitle>疑似重复记录</AlertDialogTitle>
-            <AlertDialogDescription className="text-muted-foreground">
-              已有《{pendingDup?.existing.title}》在 {pendingDup?.existing.date}（{pendingDup?.existing.cinema || '未知影院'}）的观影记录。
-              如果是同一天又看了一场可以继续添加，否则建议编辑原记录。
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className={btnCls}>取消</AlertDialogCancel>
-            <AlertDialogAction className="bg-amber-500 text-stone-950 hover:bg-amber-400"
-              onClick={() => {
-                if (pendingDup) {
-                  addRecord(pendingDup.draft)
-                  toast.success(`已添加《${pendingDup.draft.title}》`)
-                  setPendingDup(null)
-                  setEditing(null)
-                }
-              }}>
-              仍要添加
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
