@@ -3,6 +3,7 @@
 #   npm run build:cf && npx wrangler deploy
 name = "movie-tracker"
 compatibility_date = "2026-08-28"
+main = "worker.js"
 
 # 接管哪个域名下的哪个子路径（其余路径不受影响）
 routes = [
