@@ -1,7 +1,8 @@
 import { lazy, Suspense, useRef, useState, useCallback, useEffect } from 'react'
-import { Clapperboard, Loader2, Download, FileSpreadsheet, Info, Moon, Plus, RotateCcw, Settings, Sun, Upload, X } from 'lucide-react'
+import { ChevronDown, Clapperboard, Database, Loader2, Download, FileSpreadsheet, Info, Moon, Plus, RotateCcw, Settings, Sparkles, Sun, Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -45,12 +46,29 @@ export default function Home() {
   const [tab, setTab] = useState('overview')
   const { theme, toggle } = useTheme()
   const [bannerDismissed, setBannerDismissed] = useState(false)
+  const [demoDismissed, setDemoDismissed] = useState(false)
+  const [dataMenuOpen, setDataMenuOpen] = useState(false)
   const [lastExport, setLastExport] = useState<number>(() => Number(localStorage.getItem(LAST_EXPORT_KEY)) || 0)
-  const backupOverdue = isCustomized && (lastExport === 0 || Date.now() - lastExport > 30 * 24 * 3600 * 1000)
+  const backupOverdue = isCustomized && records.length > 0 && (lastExport === 0 || Date.now() - lastExport > 30 * 24 * 3600 * 1000)
 
   const handleExportJson = () => { exportJson(records); setLastExport(Date.now()) }
   const handleExportCsv = () => { exportCsv(records); setLastExport(Date.now()) }
   const fileRef = useRef<HTMLInputElement>(null)
+  // 副标题摘要：场次 · 影片数 · 最早一场的年月
+  const summary = (() => {
+    if (records.length === 0) return '还没有记录，点「记一笔」添加第一场观影'
+    const films = new Set(records.map(r => r.title)).size
+    const first = records.map(r => normalizeDate(r.date)).filter(d => /^\d{4}\.\d{2}/.test(d)).sort()[0]
+    return `${records.length} 场观影 · ${films} 部影片${first ? ` · 始于 ${first.slice(0, 7)}` : ''}`
+  })()
+
+  // 演示数据 → 清空开始自己的记录；撤销即恢复演示数据
+  const clearDemo = () => {
+    importRecords([])
+    toast.success('已清空演示数据，点「记一笔」添加你的第一场', {
+      action: { label: '撤销', onClick: resetToBase },
+    })
+  }
   const regionOptions = listRegions(records)
   const cinemaOptions = (() => {
     const count = new Map<string, number>()
@@ -166,25 +184,32 @@ export default function Home() {
               <h1 className="text-3xl font-bold tracking-tight">观影数据库</h1>
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
-              {records.length > 0 ? `${Math.min(...records.map(r => r.year))} 年至今的每一次影院之旅` : '每一次影院之旅'} · 修改会保存在当前浏览器，记得定期导出备份
+              {summary}
+              {!isCustomized && records.length > 0 && (
+                <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">演示数据</span>
+              )}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button className="bg-amber-500 text-stone-950 hover:bg-amber-400" title="快捷键 N" onClick={() => { setEditing(null); setFormOpen(true) }}>
               <Plus className="mr-1.5 h-4 w-4" />记一笔
             </Button>
-            <Button variant="outline" className={btnCls} onClick={handleExportJson}>
-              <Download className="mr-1.5 h-4 w-4" />导出 JSON
-            </Button>
-            <Button variant="outline" className={btnCls} onClick={handleExportCsv}>
-              <FileSpreadsheet className="mr-1.5 h-4 w-4" />导出 CSV
-            </Button>
-            <Button variant="outline" className={btnCls} onClick={() => fileRef.current?.click()}>
-              <Upload className="mr-1.5 h-4 w-4" />导入
-            </Button>
-            <Button variant="outline" className={btnCls} onClick={() => setResetOpen(true)}>
-              <RotateCcw className="mr-1.5 h-4 w-4" />重置
-            </Button>
+            <Popover open={dataMenuOpen} onOpenChange={setDataMenuOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className={btnCls}>
+                  <Database className="mr-1.5 h-4 w-4" />数据<ChevronDown className="ml-1 h-3.5 w-3.5 opacity-60" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-52 border-border p-1">
+                <MenuItem icon={Download} label="导出 JSON" hint="完整备份" onClick={() => { setDataMenuOpen(false); handleExportJson() }} />
+                <MenuItem icon={FileSpreadsheet} label="导出 CSV" hint="表格软件" onClick={() => { setDataMenuOpen(false); handleExportCsv() }} />
+                <MenuItem icon={Upload} label="导入 JSON" onClick={() => { setDataMenuOpen(false); fileRef.current?.click() }} />
+                {isCustomized && <>
+                  <div className="my-1 h-px bg-border" />
+                  <MenuItem icon={RotateCcw} label="恢复演示数据" danger onClick={() => { setDataMenuOpen(false); setResetOpen(true) }} />
+                </>}
+              </PopoverContent>
+            </Popover>
             <Button variant="outline" size="icon" className={btnCls} title="设置" onClick={() => setSettingsOpen(true)}>
               <Settings className="h-4 w-4" />
             </Button>
@@ -194,6 +219,22 @@ export default function Home() {
             <input ref={fileRef} type="file" accept="application/json" className="hidden" onChange={handleImport} />
           </div>
         </header>
+
+        {!isCustomized && records.length > 0 && !demoDismissed && (
+          <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm">
+            <Sparkles className="h-4 w-4 shrink-0 text-amber-500 dark:text-amber-400" />
+            <span className="min-w-[14rem] flex-1 text-muted-foreground">
+              当前展示的是 <span className="text-foreground">{baseCount} 条演示数据</span>，可以先随便看看。准备好记录自己的观影时，清空它们或导入备份。
+            </span>
+            <div className="flex items-center gap-2">
+              <Button size="sm" className="bg-amber-500 text-stone-950 hover:bg-amber-400" onClick={clearDemo}>清空，开始记录</Button>
+              <Button size="sm" variant="outline" className={btnCls} onClick={() => fileRef.current?.click()}>导入备份</Button>
+              <button className="text-muted-foreground hover:text-foreground" title="知道了" onClick={() => setDemoDismissed(true)}>
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
 
         {backupOverdue && !bannerDismissed && (
           <div className="mb-6 flex items-center gap-3 rounded-lg border border-amber-500/40 bg-amber-400/10 px-4 py-3 text-sm">
@@ -212,37 +253,60 @@ export default function Home() {
           </div>
         )}
 
-        <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="mb-4 border border-border bg-card">
-            <TabsTrigger value="overview" className="data-[state=active]:bg-amber-500 data-[state=active]:text-stone-950">统计概览</TabsTrigger>
-            <TabsTrigger value="records" className="data-[state=active]:bg-amber-500 data-[state=active]:text-stone-950">全部记录</TabsTrigger>
-            <TabsTrigger value="posters" className="data-[state=active]:bg-amber-500 data-[state=active]:text-stone-950">海报墙</TabsTrigger>
-          </TabsList>
-          <TabsContent value="overview">
-            <Suspense fallback={<SectionFallback />}>
-              <StatsOverview records={records} />
-            </Suspense>
-          </TabsContent>
-          <TabsContent value="records">
-            <Suspense fallback={<SectionFallback />}>
-              <RecordsTable
-                records={records}
-                onEdit={r => { setEditing(r); setFormOpen(true) }}
-                onDelete={setDeleting}
-                onDeleteMany={handleDeleteMany}
-                onSetRegion={handleSetRegion}
-              />
-            </Suspense>
-          </TabsContent>
-          <TabsContent value="posters">
-            <Suspense fallback={<SectionFallback />}>
-              <PosterWall records={records} onNeedSettings={() => setSettingsOpen(true)} />
-            </Suspense>
-          </TabsContent>
-        </Tabs>
+        {records.length === 0 ? (
+          <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed border-border px-6 py-20 text-center">
+            <div className="rounded-2xl bg-amber-400/10 p-4">
+              <Clapperboard className="h-8 w-8 text-amber-500 dark:text-amber-400" />
+            </div>
+            <div>
+              <p className="font-medium text-foreground">还没有观影记录</p>
+              <p className="mt-1 text-sm text-muted-foreground">记下看过的每一场，统计图表和海报墙会自动生成。支持上传票根截图识别填表。</p>
+            </div>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button className="bg-amber-500 text-stone-950 hover:bg-amber-400" onClick={() => { setEditing(null); setFormOpen(true) }}>
+                <Plus className="mr-1.5 h-4 w-4" />记第一笔
+              </Button>
+              <Button variant="outline" className={btnCls} onClick={() => fileRef.current?.click()}>
+                <Upload className="mr-1.5 h-4 w-4" />导入备份
+              </Button>
+              <Button variant="ghost" className="text-muted-foreground hover:text-foreground" onClick={() => { resetToBase(); toast.success('已恢复演示数据') }}>
+                看看演示数据
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Tabs value={tab} onValueChange={setTab}>
+            <TabsList className="mb-4 border border-border bg-card">
+              <TabsTrigger value="overview" className="data-[state=active]:bg-amber-500 data-[state=active]:text-stone-950">统计概览</TabsTrigger>
+              <TabsTrigger value="records" className="data-[state=active]:bg-amber-500 data-[state=active]:text-stone-950">全部记录</TabsTrigger>
+              <TabsTrigger value="posters" className="data-[state=active]:bg-amber-500 data-[state=active]:text-stone-950">海报墙</TabsTrigger>
+            </TabsList>
+            <TabsContent value="overview">
+              <Suspense fallback={<SectionFallback />}>
+                <StatsOverview records={records} />
+              </Suspense>
+            </TabsContent>
+            <TabsContent value="records">
+              <Suspense fallback={<SectionFallback />}>
+                <RecordsTable
+                  records={records}
+                  onEdit={r => { setEditing(r); setFormOpen(true) }}
+                  onDelete={setDeleting}
+                  onDeleteMany={handleDeleteMany}
+                  onSetRegion={handleSetRegion}
+                />
+              </Suspense>
+            </TabsContent>
+            <TabsContent value="posters">
+              <Suspense fallback={<SectionFallback />}>
+                <PosterWall records={records} onNeedSettings={() => setSettingsOpen(true)} />
+              </Suspense>
+            </TabsContent>
+          </Tabs>
+        )}
 
         <footer className="mt-10 border-t border-border/60 pt-4 text-xs text-muted-foreground">
-          数据维护：在「全部记录」中直接增删改，或导出 JSON 后用「导入」整体替换。当前数据仅存储于本浏览器，换设备前请先导出。
+          数据只保存在当前浏览器，清除浏览器数据或换设备前，请先在「数据」菜单中导出 JSON。
           <span className="ml-2 text-muted-foreground/60">观影数据库 v{version}</span>
         </footer>
       </div>
@@ -293,16 +357,16 @@ export default function Home() {
       <AlertDialog open={resetOpen} onOpenChange={setResetOpen}>
         <AlertDialogContent className="border-border bg-background text-foreground">
           <AlertDialogHeader>
-            <AlertDialogTitle>重置为初始数据？</AlertDialogTitle>
+            <AlertDialogTitle>恢复演示数据？</AlertDialogTitle>
             <AlertDialogDescription className="text-muted-foreground">
-              你在本浏览器中的全部修改都会被丢弃，恢复到内置的 {baseCount} 条原始记录。建议先导出备份。
+              当前的 {records.length} 条记录会被替换为内置的 {baseCount} 条演示数据。建议先导出备份。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className={btnCls}>取消</AlertDialogCancel>
             <AlertDialogAction className="bg-rose-600 text-white hover:bg-rose-500"
-              onClick={() => { resetToBase(); toast.success('已重置为初始数据') }}>
-              重置
+              onClick={() => { resetToBase(); toast.success('已恢复演示数据') }}>
+              恢复
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -334,5 +398,24 @@ export default function Home() {
 
       <Toaster theme={theme} position="bottom-right" />
     </div>
+  )
+}
+
+function MenuItem({ icon: Icon, label, hint, danger, onClick }: {
+  icon: React.ComponentType<{ className?: string }>
+  label: string
+  hint?: string
+  danger?: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-accent focus-visible:bg-accent ${danger ? 'text-rose-600 dark:text-rose-400' : 'text-foreground'}`}
+    >
+      <Icon className="h-4 w-4 opacity-70" />
+      <span className="flex-1">{label}</span>
+      {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
+    </button>
   )
 }

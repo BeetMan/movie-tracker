@@ -132,8 +132,9 @@ export default function StatsOverview({ records }: { records: MovieRecord[] }) {
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-        {cards.map(c => (
-          <Card key={c.label} className="border-border bg-card">
+        {cards.map((c, i) => (
+          // 手机端两列：奇数张时最后一张占满整行，避免留空位
+          <Card key={c.label} className={`border-border bg-card py-0 ${i === cards.length - 1 && cards.length % 2 ? 'col-span-2 md:col-span-1' : ''}`}>
             <CardContent className="flex items-center gap-3 p-4">
               <div className="rounded-lg bg-amber-400/10 p-2">
                 <c.icon className="h-5 w-5 text-amber-500 dark:text-amber-400" />
