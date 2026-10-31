@@ -13,7 +13,7 @@ import { brandColor, formatPrice } from '@/types/movie'
 import { overallStats, spendByCurrency, byYear, byFormat, topCinemas, byMonth, topRewatched, dayCounts, yoyCompare } from '@/lib/stats'
 import { chartPalette, useTheme } from '@/hooks/useTheme'
 import { getPosterCache, subscribePosters } from '@/lib/tmdb'
-import { renderReviewCard } from '@/lib/reviewCard'
+import { downloadFile } from '@/lib/download'
 import { toast } from 'sonner'
 
 export default function StatsOverview({ records }: { records: MovieRecord[] }) {
@@ -64,6 +64,7 @@ export default function StatsOverview({ records }: { records: MovieRecord[] }) {
     setReviewUrl('')
     setGenerating(true)
     try {
+      const { renderReviewCard } = await import('@/lib/reviewCard')
       setReviewUrl(await renderReviewCard(records, y, posters))
     } catch (e) {
       toast.error(e instanceof Error ? e.message : '生成失败')
@@ -131,8 +132,9 @@ export default function StatsOverview({ records }: { records: MovieRecord[] }) {
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-        {cards.map(c => (
-          <Card key={c.label} className="border-border bg-card">
+        {cards.map((c, i) => (
+          // 手机端两列：奇数张时最后一张占满整行，避免留空位
+          <Card key={c.label} className={`border-border bg-card py-0 ${i === cards.length - 1 && cards.length % 2 ? 'col-span-2 md:col-span-1' : ''}`}>
             <CardContent className="flex items-center gap-3 p-4">
               <div className="rounded-lg bg-amber-400/10 p-2">
                 <c.icon className="h-5 w-5 text-amber-500 dark:text-amber-400" />
@@ -333,12 +335,7 @@ export default function StatsOverview({ records }: { records: MovieRecord[] }) {
             <Button variant="outline" className="border-input bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground"
               onClick={() => setReviewOpen(false)}>关闭</Button>
             <Button className="bg-amber-500 text-stone-950 hover:bg-amber-400" disabled={!reviewUrl}
-              onClick={() => {
-                const a = document.createElement('a')
-                a.href = reviewUrl
-                a.download = `${reviewYear}观影报告.png`
-                a.click()
-              }}>
+              onClick={() => downloadFile(reviewUrl, `${reviewYear}观影报告.png`)}>
               <ImageDown className="mr-1.5 h-4 w-4" />下载 PNG
             </Button>
           </div>

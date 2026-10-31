@@ -5,6 +5,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Calendar } from '@/components/ui/calendar'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
@@ -27,6 +31,8 @@ interface Props {
   cinemas: string[]
   /** 给定影院，返回其历史影厅列表（按频次降序），用于影厅联想 */
   suggestHalls: (cinema: string) => string[]
+  /** 新增时查找疑似重复的已有记录（同片名同日期），没有返回 undefined */
+  findDuplicate: (draft: MovieDraft) => MovieRecord | undefined
 }
 
 const empty: MovieDraft = {
@@ -48,19 +54,21 @@ function parseDate(s: string): Date | undefined {
   return Number.isNaN(d.getTime()) ? undefined : d
 }
 
-export default function MovieFormDialog({ open, onOpenChange, initial, onSubmit, onNeedSettings, suggestRegion, regions, cinemas, suggestHalls }: Props) {
+export default function MovieFormDialog({ open, onOpenChange, initial, onSubmit, onNeedSettings, suggestRegion, regions, cinemas, suggestHalls, findDuplicate }: Props) {
   const [form, setForm] = useState<MovieDraft>(empty)
   const [priceText, setPriceText] = useState('')
   const [extracting, setExtracting] = useState(false)
   const [ocrPct, setOcrPct] = useState<number | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [calOpen, setCalOpen] = useState(false)
+  const [pendingDup, setPendingDup] = useState<{ draft: MovieDraft; existing: MovieRecord; keepOpen: boolean } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (open) {
       setPreview(null)
       setExtracting(false)
+      setPendingDup(null)
       if (initial) {
         const { title, date, format, cinema, hall, seat, price, note, special, region } = initial
         setForm({ title, date, format, cinema, hall, seat, price, currency: initial.currency ?? 'CNY', note, special, region })
@@ -137,7 +145,7 @@ export default function MovieFormDialog({ open, onOpenChange, initial, onSubmit,
 
   const handleSubmit = (keepOpen = false) => {
     const price = priceText.trim() === '' ? null : Number(priceText)
-    onSubmit({
+    const draft: MovieDraft = {
       ...form,
       title: form.title.trim(),
       date: normalizeDate(form.date),
@@ -145,7 +153,18 @@ export default function MovieFormDialog({ open, onOpenChange, initial, onSubmit,
       price: price !== null && !Number.isNaN(price) ? price : null,
       note: form.note?.trim() || null,
       special: form.special?.trim() || null,
-    })
+    }
+    // 新增时先查重；确认弹窗期间表单内容原样保留，取消即可回到表单继续改
+    const existing = initial ? undefined : findDuplicate(draft)
+    if (existing) {
+      setPendingDup({ draft, existing, keepOpen })
+      return
+    }
+    commit(draft, keepOpen)
+  }
+
+  const commit = (draft: MovieDraft, keepOpen: boolean) => {
+    onSubmit(draft)
     if (keepOpen && !initial) {
       // 连续录入：保留对话框，重置为下一张票的空白表单（日期仍默认今天）
       setForm({ ...empty, date: fmtDate(new Date()) })
@@ -301,6 +320,28 @@ export default function MovieFormDialog({ open, onOpenChange, initial, onSubmit,
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <AlertDialog open={!!pendingDup} onOpenChange={v => !v && setPendingDup(null)}>
+        <AlertDialogContent className="border-border bg-background text-foreground">
+          <AlertDialogHeader>
+            <AlertDialogTitle>疑似重复记录</AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground">
+              已有《{pendingDup?.existing.title}》在 {pendingDup?.existing.date}（{pendingDup?.existing.cinema || '未知影院'}）的观影记录。
+              如果是同一天又看了一场可以继续添加，否则取消后可继续修改。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-input bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground">返回修改</AlertDialogCancel>
+            <AlertDialogAction className="bg-amber-500 text-stone-950 hover:bg-amber-400"
+              onClick={() => {
+                if (pendingDup) commit(pendingDup.draft, pendingDup.keepOpen)
+                setPendingDup(null)
+              }}>
+              仍要添加
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   )
 }

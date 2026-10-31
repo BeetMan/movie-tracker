@@ -1,29 +1,45 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useSyncExternalStore } from 'react'
 
 export const THEME_STORAGE = 'movie-db-theme'
 export type Theme = 'dark' | 'light'
 
+// —— 全局主题 store：多个组件调用 useTheme() 共享同一份状态，切换时同步刷新（如统计页图表配色） ——
+let current: Theme = readStored()
+const listeners = new Set<() => void>()
+
+function readStored(): Theme {
+  try {
+    return localStorage.getItem(THEME_STORAGE) === 'light' ? 'light' : 'dark'
+  } catch {
+    return 'dark'
+  }
+}
+
 export function getTheme(): Theme {
-  return (localStorage.getItem(THEME_STORAGE) as Theme) || 'dark'
+  return current
+}
+
+function subscribe(fn: () => void) {
+  listeners.add(fn)
+  return () => { listeners.delete(fn) }
+}
+
+export function setTheme(theme: Theme) {
+  current = theme
+  document.documentElement.classList.toggle('dark', theme === 'dark')
+  try { localStorage.setItem(THEME_STORAGE, theme) } catch { /* ignore */ }
+  listeners.forEach(fn => fn())
 }
 
 /** 在首次渲染前把主题 class 应用到 <html>，避免闪烁 */
 export function applyInitialTheme() {
-  document.documentElement.classList.toggle('dark', getTheme() === 'dark')
+  document.documentElement.classList.toggle('dark', current === 'dark')
 }
 
+const toggle = () => setTheme(current === 'dark' ? 'light' : 'dark')
+
 export function useTheme() {
-  const [theme, setTheme] = useState<Theme>(getTheme)
-
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark')
-    localStorage.setItem(THEME_STORAGE, theme)
-  }, [theme])
-
-  const toggle = useCallback(() => {
-    setTheme(t => (t === 'dark' ? 'light' : 'dark'))
-  }, [])
-
+  const theme = useSyncExternalStore(subscribe, getTheme)
   return { theme, isDark: theme === 'dark', toggle }
 }
 

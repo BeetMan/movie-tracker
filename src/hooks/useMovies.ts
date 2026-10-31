@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import baseData from '@/data/movies.json'
 import type { MovieRecord, MovieDraft } from '@/types/movie'
-import { learnRegionMap, dedupBase, normSeat, normalizeDate } from '@/types/movie'
+import { learnRegionMap } from '@/types/movie'
+import { deriveYear, mergeInto, parseStored, replaceWith } from '@/lib/records'
+import { downloadFile, todayStamp } from '@/lib/download'
 
-const STORAGE_KEY = 'movie-db-v1'
+export const STORAGE_KEY = 'movie-db-v1'
 /** 最后一次导出备份的时间戳（毫秒），用于备份提醒 */
 export const LAST_EXPORT_KEY = 'movie-db-last-export'
 
@@ -11,27 +14,31 @@ const base = baseData as MovieRecord[]
 
 function load(): MovieRecord[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw) as MovieRecord[]
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed
-    }
+    return parseStored(localStorage.getItem(STORAGE_KEY)) ?? base
   } catch {
-    /* ignore */
+    return base
   }
-  return base
-}
-
-function deriveYear(date: string): number {
-  const m = /^(\d{4})/.exec(date.trim())
-  return m ? parseInt(m[1], 10) : new Date().getFullYear()
 }
 
 export function useMovies() {
   const [records, setRecords] = useState<MovieRecord[]>(load)
+  // 仍是内置演示数据（引用相等）时不写入 localStorage：
+  // 只看演示的访客不会被标记为「有改动」，重置后也保持干净
+  const isCustomized = records !== base
+  const warnedRef = useRef(false)
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(records))
+    if (records === base) return
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(records))
+      warnedRef.current = false
+    } catch {
+      // 存储空间满 / 隐私模式禁用：内存中的数据仍可用，提醒用户尽快导出
+      if (!warnedRef.current) {
+        warnedRef.current = true
+        toast.error('浏览器存储写入失败，本次修改刷新后会丢失，请立即导出 JSON 备份', { duration: 10000 })
+      }
+    }
   }, [records])
 
   /** 影院 → 地区，从现有数据学习，用于预填 */
@@ -84,51 +91,22 @@ export function useMovies() {
     setRecords(prev => prev.map(r => (set.has(r.id) ? { ...r, region } : r)))
   }, [])
 
-  /**
-   * 合并导入：把文件里的记录补充进现有数据，按「片名+日期+影院+座位」去重。
-   * 座位一致或任一方座位为空（信息不全不敢放行）即视为重复；id 重新续编，地区沿用学习结果。
-   */
+  /** 合并导入（list 须已经过 sanitizeRecords 清洗），返回新增 / 跳过条数 */
   const mergeRecords = useCallback((list: MovieRecord[]) => {
-    const seen = records.map(r => ({ base: dedupBase(r), seat: normSeat(r.seat) }))
-    const regionMap = learnRegionMap(records)
-    let maxId = Math.max(0, ...records.map(r => r.id))
-    const merged = [...records]
-    let added = 0
-    let skipped = 0
-    for (const raw of list) {
-      const r = { ...raw, date: normalizeDate(raw.date ?? '') }
-      const base = dedupBase(r)
-      const seat = normSeat(r.seat)
-      if (seen.some(e => e.base === base && (e.seat === seat || e.seat === '' || seat === ''))) {
-        skipped += 1
-        continue
-      }
-      seen.push({ base, seat })
-      const region = r.region?.trim() || regionMap.get((r.cinema ?? '').trim()) || ''
-      merged.push({ ...r, id: ++maxId, region, year: r.year ?? deriveYear(r.date) })
-      added += 1
-    }
+    const { merged, added, skipped } = mergeInto(records, list)
     setRecords(merged)
     return { added, skipped }
   }, [records])
 
+  /** 整体替换（list 须已经过 sanitizeRecords 清洗） */
   const importRecords = useCallback((list: MovieRecord[]) => {
-    const map = learnRegionMap(list)
-    const cleaned = list.map((r, i) => ({
-      ...r,
-      id: i + 1,
-      region: r.region?.trim() || map.get((r.cinema ?? '').trim()) || '',
-      year: r.year ?? deriveYear(r.date || ''),
-    }))
-    setRecords(cleaned)
+    setRecords(replaceWith(list))
   }, [])
 
   const resetToBase = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEY)
+    try { localStorage.removeItem(STORAGE_KEY) } catch { /* ignore */ }
     setRecords(base)
   }, [])
-
-  const isCustomized = useMemo(() => localStorage.getItem(STORAGE_KEY) !== null, [records])
 
   return { records, addRecord, updateRecord, deleteRecord, restoreRecords, deleteMany, setRegionFor, importRecords, mergeRecords, resetToBase, isCustomized, suggestRegion, baseCount: base.length }
 }
@@ -136,7 +114,7 @@ export function useMovies() {
 export function exportJson(records: MovieRecord[]) {
   markExported()
   const blob = new Blob([JSON.stringify(records, null, 1)], { type: 'application/json' })
-  download(blob, `观影数据库_${today()}.json`)
+  downloadFile(blob, `观影数据库_${todayStamp()}.json`)
 }
 
 export function exportCsv(records: MovieRecord[]) {
@@ -150,22 +128,9 @@ export function exportCsv(records: MovieRecord[]) {
     [r.title, r.date, r.region, r.format, r.cinema, r.hall, r.seat, r.price, r.currency ?? 'CNY', r.note, r.special].map(esc).join(',')
   )
   const blob = new Blob(['﻿' + header + '\n' + lines.join('\n')], { type: 'text/csv' })
-  download(blob, `观影数据库_${today()}.csv`)
+  downloadFile(blob, `观影数据库_${todayStamp()}.csv`)
 }
 
-function markExported() {
+export function markExported() {
   try { localStorage.setItem(LAST_EXPORT_KEY, String(Date.now())) } catch { /* ignore */ }
-}
-
-function download(blob: Blob, name: string) {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = name
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
-function today() {
-  return new Date().toISOString().slice(0, 10)
 }

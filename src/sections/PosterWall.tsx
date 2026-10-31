@@ -91,7 +91,11 @@ export default function PosterWall({ records, onNeedSettings }: Props) {
         }
       }
     })
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+      // 被新一轮匹配取代时先复位；若新一轮无缺失海报，不会再有人把它关掉
+      setFetching(false)
+    }
   }, [key, shown])
 
   if (!key) {
