@@ -64,19 +64,26 @@ export default function Home() {
   })()
 
   // 演示数据 → 清空开始自己的记录；撤销即恢复演示数据
-  const clearDemo = () => {
-    importRecords([])
-    toast.success('已清空演示数据，点「记一笔」添加你的第一场', {
-      action: { label: '撤销', onClick: resetToBase },
-    })
-  }
+  const clearDemo = () => withUndo('已清空演示数据，点「记一笔」添加你的第一场', () => importRecords([]))
 
   // 替换类操作都给撤销：先拍快照，撤销时整体回滚
+  const undoToast = useRef<{ id: string | number; armed: boolean } | null>(null)
   const withUndo = (message: string, run: () => void) => {
     const snapshot = records
     run()
-    toast.success(message, { duration: 10000, action: { label: '撤销', onClick: () => restoreAll(snapshot) } })
+    const id = toast.success(message, {
+      duration: 10000,
+      action: { label: '撤销', onClick: () => { undoToast.current = null; restoreAll(snapshot) } },
+    })
+    undoToast.current = { id, armed: false }
   }
+  // 操作之后数据又被改动（如紧接着记了一笔），快照已过期：收起撤销，避免回滚时误删新数据
+  useEffect(() => {
+    const u = undoToast.current
+    if (!u) return
+    if (!u.armed) u.armed = true // 第一次变化是操作本身
+    else { toast.dismiss(u.id); undoToast.current = null }
+  }, [records])
   const regionOptions = listRegions(records)
   const cinemaOptions = (() => {
     const count = new Map<string, number>()
