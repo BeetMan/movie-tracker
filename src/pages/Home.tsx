@@ -1,5 +1,5 @@
 import { lazy, Suspense, useRef, useState, useCallback, useEffect } from 'react'
-import { ChevronDown, Clapperboard, Database, Loader2, Download, FileSpreadsheet, Info, Moon, Plus, RotateCcw, Settings, Sparkles, Sun, Upload, X } from 'lucide-react'
+import { Check, ChevronDown, Clapperboard, Database, Loader2, Download, FileSpreadsheet, Info, Monitor, Moon, Plus, RotateCcw, Settings, Sparkles, Sun, Upload, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Toaster, toast } from 'sonner'
 import { useMovies, exportJson, exportCsv, LAST_EXPORT_KEY } from '@/hooks/useMovies'
-import { useTheme } from '@/hooks/useTheme'
+import { useTheme, type ThemePref } from '@/hooks/useTheme'
 
 // 各区块按需加载：图表（recharts）、日历、识别等重依赖不进首屏主包
 const StatsOverview = lazy(() => import('@/sections/StatsOverview'))
@@ -31,7 +31,7 @@ import { sanitizeRecords } from '@/lib/records'
 import { version } from '../../package.json'
 
 export default function Home() {
-  const { records, addRecord, updateRecord, deleteRecord, restoreRecords, deleteMany, setRegionFor, importRecords, mergeRecords, resetToBase, isCustomized, suggestRegion, baseCount } = useMovies()
+  const { records, addRecord, updateRecord, deleteRecord, restoreRecords, restoreAll, deleteMany, setRegionFor, importRecords, mergeRecords, resetToBase, isCustomized, suggestRegion, baseCount } = useMovies()
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<MovieRecord | null>(null)
   const [deleting, setDeleting] = useState<MovieRecord | null>(null)
@@ -44,7 +44,8 @@ export default function Home() {
   if (formOpen && !formMounted) setFormMounted(true)
   if (settingsOpen && !settingsMounted) setSettingsMounted(true)
   const [tab, setTab] = useState('overview')
-  const { theme, toggle } = useTheme()
+  const { theme, preference, setPreference } = useTheme()
+  const [themeMenuOpen, setThemeMenuOpen] = useState(false)
   const [bannerDismissed, setBannerDismissed] = useState(false)
   const [demoDismissed, setDemoDismissed] = useState(false)
   const [dataMenuOpen, setDataMenuOpen] = useState(false)
@@ -68,6 +69,13 @@ export default function Home() {
     toast.success('已清空演示数据，点「记一笔」添加你的第一场', {
       action: { label: '撤销', onClick: resetToBase },
     })
+  }
+
+  // 替换类操作都给撤销：先拍快照，撤销时整体回滚
+  const withUndo = (message: string, run: () => void) => {
+    const snapshot = records
+    run()
+    toast.success(message, { duration: 10000, action: { label: '撤销', onClick: () => restoreAll(snapshot) } })
   }
   const regionOptions = listRegions(records)
   const cinemaOptions = (() => {
@@ -165,8 +173,7 @@ export default function Home() {
 
   const doReplaceImport = () => {
     if (!importList) return
-    importRecords(importList)
-    toast.success(`已整体替换为文件中的 ${importList.length} 条记录`)
+    withUndo(`已整体替换为文件中的 ${importList.length} 条记录`, () => importRecords(importList))
     setImportList(null)
   }
 
@@ -213,9 +220,19 @@ export default function Home() {
             <Button variant="outline" size="icon" className={btnCls} title="设置" onClick={() => setSettingsOpen(true)}>
               <Settings className="h-4 w-4" />
             </Button>
-            <Button variant="outline" size="icon" className={btnCls} title={theme === 'dark' ? '切换为亮色模式' : '切换为深色模式'} onClick={toggle}>
-              {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            </Button>
+            <Popover open={themeMenuOpen} onOpenChange={setThemeMenuOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="icon" className={btnCls} title="外观">
+                  {preference === 'system' ? <Monitor className="h-4 w-4" /> : theme === 'dark' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-40 border-border p-1">
+                {THEME_OPTIONS.map(o => (
+                  <MenuItem key={o.value} icon={o.icon} label={o.label} checked={preference === o.value}
+                    onClick={() => { setThemeMenuOpen(false); setPreference(o.value) }} />
+                ))}
+              </PopoverContent>
+            </Popover>
             <input ref={fileRef} type="file" accept="application/json" className="hidden" onChange={handleImport} />
           </div>
         </header>
@@ -269,7 +286,7 @@ export default function Home() {
               <Button variant="outline" className={btnCls} onClick={() => fileRef.current?.click()}>
                 <Upload className="mr-1.5 h-4 w-4" />导入备份
               </Button>
-              <Button variant="ghost" className="text-muted-foreground hover:text-foreground" onClick={() => { resetToBase(); toast.success('已恢复演示数据') }}>
+              <Button variant="ghost" className="text-muted-foreground hover:text-foreground" onClick={() => withUndo('已恢复演示数据', resetToBase)}>
                 看看演示数据
               </Button>
             </div>
@@ -365,7 +382,7 @@ export default function Home() {
           <AlertDialogFooter>
             <AlertDialogCancel className={btnCls}>取消</AlertDialogCancel>
             <AlertDialogAction className="bg-rose-600 text-white hover:bg-rose-500"
-              onClick={() => { resetToBase(); toast.success('已恢复演示数据') }}>
+              onClick={() => withUndo('已恢复演示数据', resetToBase)}>
               恢复
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -401,11 +418,18 @@ export default function Home() {
   )
 }
 
-function MenuItem({ icon: Icon, label, hint, danger, onClick }: {
+const THEME_OPTIONS: { value: ThemePref; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { value: 'dark', label: '深色', icon: Moon },
+  { value: 'light', label: '浅色', icon: Sun },
+  { value: 'system', label: '跟随系统', icon: Monitor },
+]
+
+function MenuItem({ icon: Icon, label, hint, danger, checked, onClick }: {
   icon: React.ComponentType<{ className?: string }>
   label: string
   hint?: string
   danger?: boolean
+  checked?: boolean
   onClick: () => void
 }) {
   return (
@@ -416,6 +440,7 @@ function MenuItem({ icon: Icon, label, hint, danger, onClick }: {
       <Icon className="h-4 w-4 opacity-70" />
       <span className="flex-1">{label}</span>
       {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
+      {checked && <Check className="h-4 w-4 text-amber-500 dark:text-amber-400" />}
     </button>
   )
 }

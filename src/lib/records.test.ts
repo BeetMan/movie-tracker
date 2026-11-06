@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sanitizeRecord, sanitizeRecords, parseStored, mergeInto, replaceWith, deriveYear } from '@/lib/records'
+import { sanitizeRecord, sanitizeRecords, parseStored, mergeInto, replaceWith, deriveYear, sortRecords } from '@/lib/records'
 import type { MovieRecord } from '@/types/movie'
 
 const rec = (over: Partial<MovieRecord>): MovieRecord => ({
@@ -125,5 +125,33 @@ describe('replaceWith', () => {
 describe('deriveYear', () => {
   it('取日期前四位', () => {
     expect(deriveYear('2019.05.?')).toBe(2019)
+  })
+})
+
+describe('sortRecords', () => {
+  const list = [
+    rec({ id: 1, title: 'B', date: '2024.01.02', price: 100, currency: 'HKD' }), // ≈ ¥92
+    rec({ id: 2, title: 'A', date: '2024.01.03', price: 50, currency: 'CNY' }),
+    rec({ id: 3, title: 'C', date: '2024.01.01', price: null }),
+    rec({ id: 4, title: 'D', date: '2024.01.04', price: 15, currency: 'USD' }), // ≈ ¥106
+  ]
+  const ids = (l: MovieRecord[]) => l.map(r => r.id)
+
+  it('票价跨币种按近似人民币排序', () => {
+    expect(ids(sortRecords(list, 'price', true))).toEqual([4, 1, 2, 3])
+    expect(ids(sortRecords(list, 'price', false))).toEqual([2, 1, 4, 3])
+  })
+  it('无票价无论升降序都排最后', () => {
+    expect(sortRecords(list, 'price', true).at(-1)!.id).toBe(3)
+    expect(sortRecords(list, 'price', false).at(-1)!.id).toBe(3)
+  })
+  it('日期与片名排序', () => {
+    expect(ids(sortRecords(list, 'date', true))).toEqual([4, 2, 1, 3])
+    expect(ids(sortRecords(list, 'title', false))).toEqual([2, 1, 3, 4])
+  })
+  it('不修改原数组', () => {
+    const before = ids(list)
+    sortRecords(list, 'price', true)
+    expect(ids(list)).toEqual(before)
   })
 })

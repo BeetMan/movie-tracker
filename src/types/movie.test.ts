@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  normalizeDate, dedupBase, normSeat, formatPrice, formatCategory,
+  normalizeDate, approxCny, dedupBase, normSeat, formatPrice, formatCategory,
   learnRegionMap, currencySymbol,
 } from '@/types/movie'
 import type { MovieRecord } from '@/types/movie'
@@ -93,5 +93,17 @@ describe('learnRegionMap（影院→地区学习）', () => {
   })
   it('空影院或空地区不参与', () => {
     expect(learnRegionMap([rec({ cinema: '', region: '北京' })]).size).toBe(0)
+  })
+})
+
+describe('approxCny', () => {
+  it('按粗略汇率折算，人民币原样返回', () => {
+    expect(approxCny(50, 'CNY')).toBe(50)
+    expect(approxCny(100, 'HKD')).toBeCloseTo(92)
+  })
+  it('无票价返回 null，未知 / 缺失币种按人民币处理', () => {
+    expect(approxCny(null, 'USD')).toBeNull()
+    expect(approxCny(30, 'XYZ')).toBe(30)
+    expect(approxCny(30, undefined)).toBe(30)
   })
 })
