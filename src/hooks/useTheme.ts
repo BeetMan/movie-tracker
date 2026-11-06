@@ -2,14 +2,24 @@ import { useSyncExternalStore } from 'react'
 
 export const THEME_STORAGE = 'movie-db-theme'
 export type Theme = 'dark' | 'light'
+/** 用户偏好：固定深色 / 浅色，或跟随系统 */
+export type ThemePref = Theme | 'system'
+
+/** 把偏好解析为实际主题 */
+export function resolveTheme(pref: ThemePref, systemDark: boolean): Theme {
+  return pref === 'system' ? (systemDark ? 'dark' : 'light') : pref
+}
 
 // —— 全局主题 store：多个组件调用 useTheme() 共享同一份状态，切换时同步刷新（如统计页图表配色） ——
-let current: Theme = readStored()
+const media = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null
+let pref: ThemePref = readStored()
+let current: Theme = resolveTheme(pref, media?.matches ?? true)
 const listeners = new Set<() => void>()
 
-function readStored(): Theme {
+function readStored(): ThemePref {
   try {
-    return localStorage.getItem(THEME_STORAGE) === 'light' ? 'light' : 'dark'
+    const v = localStorage.getItem(THEME_STORAGE)
+    return v === 'light' || v === 'system' ? v : 'dark'
   } catch {
     return 'dark'
   }
@@ -19,28 +29,39 @@ export function getTheme(): Theme {
   return current
 }
 
+function getPref(): ThemePref {
+  return pref
+}
+
 function subscribe(fn: () => void) {
   listeners.add(fn)
   return () => { listeners.delete(fn) }
 }
 
-export function setTheme(theme: Theme) {
-  current = theme
-  document.documentElement.classList.toggle('dark', theme === 'dark')
-  try { localStorage.setItem(THEME_STORAGE, theme) } catch { /* ignore */ }
+function apply() {
+  current = resolveTheme(pref, media?.matches ?? true)
+  document.documentElement.classList.toggle('dark', current === 'dark')
   listeners.forEach(fn => fn())
 }
+
+export function setThemePref(next: ThemePref) {
+  pref = next
+  try { localStorage.setItem(THEME_STORAGE, next) } catch { /* ignore */ }
+  apply()
+}
+
+// 跟随系统时，系统切换深浅色立即生效
+media?.addEventListener('change', () => { if (pref === 'system') apply() })
 
 /** 在首次渲染前把主题 class 应用到 <html>，避免闪烁 */
 export function applyInitialTheme() {
   document.documentElement.classList.toggle('dark', current === 'dark')
 }
 
-const toggle = () => setTheme(current === 'dark' ? 'light' : 'dark')
-
 export function useTheme() {
   const theme = useSyncExternalStore(subscribe, getTheme)
-  return { theme, isDark: theme === 'dark', toggle }
+  const preference = useSyncExternalStore(subscribe, getPref)
+  return { theme, preference, isDark: theme === 'dark', setPreference: setThemePref }
 }
 
 /** 图表配色（recharts 不读 Tailwind 类，需按主题给 hex） */

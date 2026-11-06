@@ -14,10 +14,10 @@ import type { MovieRecord } from '@/types/movie'
 import { formatCategory, brandColor, formatPrice } from '@/types/movie'
 import { findPoster, getPosterCache, posterUrl, subscribePosters } from '@/lib/tmdb'
 import { downloadFile } from '@/lib/download'
+import { sortRecords, type SortKey } from '@/lib/records'
 
 const PAGE_SIZE = 15
 
-type SortKey = 'date' | 'price' | 'title'
 
 interface Props {
   records: MovieRecord[]
@@ -79,7 +79,7 @@ export default function RecordsTable({ records, onEdit, onDelete, onDeleteMany, 
 
   const filtered = useMemo(() => {
     const kw = q.trim().toLowerCase()
-    let list = records.filter(r => {
+    const list = records.filter(r => {
       if (year !== 'all' && r.year !== Number(year)) return false
       if (region !== 'all' && r.region !== region) return false
       if (cat !== 'all' && formatCategory(r) !== cat) return false
@@ -90,14 +90,7 @@ export default function RecordsTable({ records, onEdit, onDelete, onDeleteMany, 
       }
       return true
     })
-    list = [...list].sort((a, b) => {
-      let c = 0
-      if (sortKey === 'date') c = a.date.localeCompare(b.date)
-      else if (sortKey === 'price') c = (a.price ?? -1) - (b.price ?? -1)
-      else c = a.title.localeCompare(b.title, 'zh')
-      return sortDesc ? -c : c
-    })
-    return list
+    return sortRecords(list, sortKey, sortDesc)
   }, [records, q, year, region, cat, cinema, sortKey, sortDesc])
 
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))

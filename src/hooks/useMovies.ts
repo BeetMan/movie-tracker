@@ -108,7 +108,13 @@ export function useMovies() {
     setRecords(base)
   }, [])
 
-  return { records, addRecord, updateRecord, deleteRecord, restoreRecords, deleteMany, setRegionFor, importRecords, mergeRecords, resetToBase, isCustomized, suggestRegion, baseCount: base.length }
+  /** 整体回滚到某个快照（用于撤销替换导入 / 恢复演示数据）；快照是内置数据时按重置处理，不写存储 */
+  const restoreAll = useCallback((snapshot: MovieRecord[]) => {
+    if (snapshot === base) resetToBase()
+    else setRecords(snapshot)
+  }, [resetToBase])
+
+  return { records, addRecord, updateRecord, deleteRecord, restoreRecords, restoreAll, deleteMany, setRegionFor, importRecords, mergeRecords, resetToBase, isCustomized, suggestRegion, baseCount: base.length }
 }
 
 export function exportJson(records: MovieRecord[]) {

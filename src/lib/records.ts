@@ -3,7 +3,7 @@
  * 不碰 React 与浏览器 API，便于单元测试。
  */
 import type { MovieRecord } from '@/types/movie'
-import { CURRENCIES, dedupBase, learnRegionMap, normSeat, normalizeDate } from '@/types/movie'
+import { CURRENCIES, approxCny, dedupBase, learnRegionMap, normSeat, normalizeDate } from '@/types/movie'
 
 export function deriveYear(date: string): number {
   const m = /^(\d{4})/.exec(date.trim())
@@ -119,4 +119,23 @@ export function mergeInto(records: MovieRecord[], list: MovieRecord[]) {
 export function replaceWith(list: MovieRecord[]): MovieRecord[] {
   const map = learnRegionMap(list)
   return list.map((r, i) => ({ ...r, id: i + 1, region: r.region || map.get(r.cinema) || '' }))
+}
+
+export type SortKey = 'date' | 'price' | 'title'
+
+/**
+ * 记录排序（返回新数组）。票价按近似人民币比较，跨币种也有意义；
+ * 无票价的记录无论升序降序都排在最后。
+ */
+export function sortRecords(list: MovieRecord[], key: SortKey, desc: boolean): MovieRecord[] {
+  return [...list].sort((a, b) => {
+    if (key === 'price') {
+      const pa = approxCny(a.price, a.currency)
+      const pb = approxCny(b.price, b.currency)
+      if (pa === null || pb === null) return pa === pb ? 0 : pa === null ? 1 : -1
+      return desc ? pb - pa : pa - pb
+    }
+    const c = key === 'date' ? a.date.localeCompare(b.date) : a.title.localeCompare(b.title, 'zh')
+    return desc ? -c : c
+  })
 }

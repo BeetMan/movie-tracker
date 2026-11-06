@@ -23,7 +23,7 @@
       <style>@keyframes splash-spin{to{transform:rotate(360deg)}}</style>
       <script>
         // 亮色主题用户不闪深色屏
-        try { if (localStorage.getItem('movie-db-theme') === 'light') { var s = document.getElementById('splash'); s.style.background = '#fafaf9'; s.children[1].style.color = '#1c1917' } } catch (e) {}
+        try { var t = localStorage.getItem('movie-db-theme'); if (t === 'light' || (t === 'system' && !matchMedia('(prefers-color-scheme: dark)').matches)) { var s = document.getElementById('splash'); s.style.background = '#fafaf9'; s.children[1].style.color = '#1c1917' } } catch (e) {}
       </script>
     </div>
     <script type="module" src="/src/main.tsx"></script>

@@ -65,6 +65,17 @@ export function formatPrice(price: number | null | undefined, currency?: string 
   return `${currencySymbol(currency)}${n}`
 }
 
+/** 粗略汇率（1 单位约合多少人民币），只用于跨币种排序，不参与显示和统计 */
+const APPROX_CNY_RATE: Record<string, number> = {
+  CNY: 1, HKD: 0.92, MOP: 0.89, TWD: 0.22, USD: 7.1, EUR: 7.7, JPY: 0.047, KRW: 0.0052,
+}
+
+/** 票价折算为人民币的近似值；无票价返回 null，未知币种按人民币处理 */
+export function approxCny(price: number | null | undefined, currency?: string | null): number | null {
+  if (price === null || price === undefined) return null
+  return price * (APPROX_CNY_RATE[currency || 'CNY'] ?? 1)
+}
+
 export type MovieDraft = Omit<MovieRecord, 'id' | 'year'>
 
 /**
